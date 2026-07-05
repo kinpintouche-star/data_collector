@@ -1,0 +1,7 @@
+time: DateTime
+open: Open
+high: High
+low: Low
+close: Close
+tick_volume: Volume
+timezone: UTC

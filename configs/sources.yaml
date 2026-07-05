@@ -1,0 +1,19 @@
+sources:
+  - name: dukascopy
+    source_type: dukascopy
+    base_timezone: UTC
+    is_active: true
+    config: {}
+
+  - name: mt5
+    source_type: mt5
+    base_timezone: UTC
+    is_active: true
+    config:
+      terminal_path: null
+
+  - name: csv
+    source_type: file
+    base_timezone: UTC
+    is_active: true
+    config: {}

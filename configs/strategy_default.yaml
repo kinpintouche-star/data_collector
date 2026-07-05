@@ -1,0 +1,35 @@
+timezone: America/New_York
+only_killzone: false
+killzones:
+  london:
+    start_hour: 1
+    end_hour: 5
+  new_york:
+    start_hour: 7
+    end_hour: 11
+detect_c3: true
+trade_direction: auto
+strategy_mode: B_NO_S2_INVALIDATION
+asset_type: Index
+crt_model: sweep_back_in
+ote_deep: 0.79
+fib_forward_minutes: 180
+pd_mode: OB_OR_FVG
+pd_require_mid_in_ote: true
+sl_buffer_ticks: 2
+ob_sensitivity_mode: ATR_ADAPTIVE
+ob_atr_len: 14
+ob1_sensitivity: 5.0
+ob2_sensitivity: 8.0
+ob_min_body_ratio: 0.55
+ob_lookback1: 10
+ob_lookback2_from: 4
+ob_lookback2_to: 15
+execution:
+  initial_balance: 100000
+  order_qty: 1.0
+  fill_policy: signal_close
+  ambiguous_bar_policy: sl_first
+  commission_per_trade: 0.0
+  slippage_ticks: 0
+  max_one_position_per_symbol: true

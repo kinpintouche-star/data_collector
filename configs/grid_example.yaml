@@ -1,0 +1,42 @@
+base:
+  timezone: America/New_York
+  detect_c3: true
+  only_killzone: false
+  trade_direction: auto
+  asset_type: Index
+  crt_model: sweep_back_in
+  execution:
+    initial_balance: 100000
+    order_qty: 1.0
+    fill_policy: signal_close
+    ambiguous_bar_policy: sl_first
+    commission_per_trade: 0.0
+    slippage_ticks: 0
+
+grid:
+  strategy_mode:
+    - A_INVALIDATION_S2
+    - B_NO_S2_INVALIDATION
+    - C_S2_INSIDE_S1
+  pd_mode:
+    - FVG
+    - OB_SOLID
+    - OB_OR_FVG
+  pd_require_mid_in_ote:
+    - true
+    - false
+  ote_deep:
+    - 0.79
+    - 0.705
+  ob_min_body_ratio:
+    - 0.45
+    - 0.55
+    - 0.65
+  ob1_sensitivity:
+    - 3.0
+    - 5.0
+    - 8.0
+  ob2_sensitivity:
+    - 5.0
+    - 8.0
+    - 12.0

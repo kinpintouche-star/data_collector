@@ -1,0 +1,71 @@
+symbols:
+  - symbol_code: GER40
+    asset_type: index_cfd
+    description: Germany 40 Index
+    price_currency: EUR
+    timezone: Europe/Berlin
+    aliases:
+      - source: dukascopy
+        source_symbol: deuidxeur
+        source_timezone: UTC
+      - source: mt5
+        source_symbol: GER40.cash
+        source_timezone: UTC
+      - source: csv
+        source_symbol: DAX_GER40_M1
+        source_timezone: UTC
+
+  - symbol_code: XAUUSD
+    asset_type: metal
+    description: Gold versus US Dollar
+    price_currency: USD
+    timezone: UTC
+    aliases:
+      - source: mt5
+        source_symbol: XAUUSD
+      - source: csv
+        source_symbol: XAUUSD_M1
+
+  - symbol_code: EURUSD
+    asset_type: forex
+    description: Euro versus US Dollar
+    base_currency: EUR
+    quote_currency: USD
+    timezone: UTC
+    aliases:
+      - source: mt5
+        source_symbol: EURUSD
+      - source: dukascopy
+        source_symbol: eurusd
+
+  - symbol_code: NAS100
+    asset_type: index_cfd
+    description: Nasdaq 100 Index
+    price_currency: USD
+    timezone: America/New_York
+    aliases:
+      - source: mt5
+        source_symbol: USTEC
+        source_timezone: UTC
+      - source: csv
+        source_symbol: NAS100_M1
+        source_timezone: UTC
+
+  - symbol_code: MNQ
+    asset_type: futures_proxy
+    description: Micro Nasdaq 100 proxy via MT5 USTECH100mini
+    price_currency: USD
+    exchange: CME
+    timezone: America/New_York
+    metadata:
+      note: "Broker terminal does not expose native MNQ; USTECH100M is used as the MT5 mini Nasdaq proxy."
+    aliases:
+      - source: mt5
+        source_symbol: USTECH100M
+        source_timezone: UTC
+        metadata:
+          proxy_for: MNQ
+          broker_description: USTECH100mini
+      - source: csv
+        source_symbol: MNQ_M1
+        source_timezone: UTC

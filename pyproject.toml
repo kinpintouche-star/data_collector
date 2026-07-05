@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ict-crt-platform"
+version = "0.1.0"
+description = "ICT CRT M1 backtesting and analytics platform with a generic market data layer and PostgreSQL."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "MetaTrader5>=5.0.45; platform_system == 'Windows'",
+    "pandas>=2.2",
+    "numpy>=1.26",
+    "SQLAlchemy>=2.0",
+    "psycopg[binary]>=3.1",
+    "alembic>=1.13",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.2",
+    "PyYAML>=6.0",
+    "typer>=0.12",
+    "rich>=13.7",
+    "streamlit>=1.35",
+    "plotly>=5.22",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2",
+    "pytest-cov>=5.0",
+]
+
+[project.scripts]
+ict = "ict.cli:app"
+
+[tool.setuptools.packages.find]
+include = ["ict*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
