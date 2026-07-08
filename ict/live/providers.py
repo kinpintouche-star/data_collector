@@ -333,10 +333,13 @@ def fetch_dukascopy_node_candles(
         if completed.returncode != 0:
             message = (completed.stderr or completed.stdout or "").strip()
             raise LiveProviderError(_short_error(message or "dukascopy-node failed."))
-        csv_files = sorted(tmp_path.glob("*.csv"))
+        csv_files = sorted(path for path in tmp_path.rglob("*.csv") if path.is_file())
         if not csv_files:
             raise LiveProviderError(f"dukascopy-node did not create a CSV for {_provider_symbol(source)}.")
-        rows = pd.concat((pd.read_csv(path) for path in csv_files), ignore_index=True)
+        non_empty_csv_files = [path for path in csv_files if path.stat().st_size > 0]
+        if not non_empty_csv_files:
+            return _frame_from_records([])
+        rows = pd.concat((pd.read_csv(path) for path in non_empty_csv_files), ignore_index=True)
     return normalize_dukascopy_node_rows(source, rows, since, until, now=now)
 
 

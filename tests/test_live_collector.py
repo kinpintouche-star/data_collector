@@ -236,6 +236,58 @@ def test_dukascopy_node_normalizes_and_ignores_open_candles() -> None:
     assert frame.iloc[0]["metadata"]["provider"] == "dukascopy_node"
 
 
+def test_dukascopy_node_fetch_reads_nested_download_csv(monkeypatch) -> None:
+    source = next(source for source in load_live_sources("configs/live_sources.yaml") if source.symbol_code == "EURUSD")
+
+    def fake_run(args, cwd, text, capture_output):
+        download_dir = cwd / "download"
+        download_dir.mkdir()
+        csv_path = download_dir / "eurusd-m1-bid-2026-01-01-2026-01-02.csv"
+        csv_path.write_text(
+            "timestamp,open,high,low,close,volume\n"
+            "1767225600000,1.1,1.2,1.0,1.15,10\n"
+            "1767225660000,1.2,1.3,1.1,1.25,20\n",
+            encoding="utf-8",
+        )
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(live_providers, "_require_command", lambda name: "npx")
+    monkeypatch.setattr(live_providers.subprocess, "run", fake_run)
+
+    frame = live_providers.fetch_dukascopy_node_candles(
+        source,
+        datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc),
+        datetime(2026, 1, 1, 0, 2, tzinfo=timezone.utc),
+        now=datetime(2026, 1, 1, 0, 3, tzinfo=timezone.utc),
+    )
+
+    assert len(frame) == 2
+    assert frame.iloc[0]["source_symbol"] == "eurusd"
+    assert frame.iloc[1]["close"] == 1.25
+
+
+def test_dukascopy_node_fetch_empty_csv_returns_empty_frame(monkeypatch) -> None:
+    source = next(source for source in load_live_sources("configs/live_sources.yaml") if source.symbol_code == "EURUSD")
+
+    def fake_run(args, cwd, text, capture_output):
+        download_dir = cwd / "download"
+        download_dir.mkdir()
+        (download_dir / "eurusd-m1-bid-2026-01-01-2026-01-02.csv").write_text("", encoding="utf-8")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(live_providers, "_require_command", lambda name: "npx")
+    monkeypatch.setattr(live_providers.subprocess, "run", fake_run)
+
+    frame = live_providers.fetch_dukascopy_node_candles(
+        source,
+        datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc),
+        datetime(2026, 1, 1, 0, 2, tzinfo=timezone.utc),
+        now=datetime(2026, 1, 1, 0, 3, tzinfo=timezone.utc),
+    )
+
+    assert frame.empty
+
+
 def test_databento_live_provider_respects_cost_guard(monkeypatch) -> None:
     source = next(source for source in load_live_sources("configs/live_sources.yaml") if source.symbol_code == "MNQ")
     calls = {}
