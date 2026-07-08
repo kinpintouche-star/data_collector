@@ -13,7 +13,7 @@ Le coeur du projet n'est pas seulement de lancer des backtests. Il faut pouvoir 
 ## Architecture Cible
 
 - Base locale Postgres: source principale et canonique pour les backtests, dashboards et archives longues.
-- Neon remote: entrepot/buffer de donnees live, avec objectif de garder au moins 180 jours M1 disponibles cote service.
+- Neon remote: entrepot/buffer de donnees live recentes, cible 30 jours dans un seul projet Free; les 180 jours M1 restent dans la base locale tant qu'une archive remote compressee n'est pas ajoutee.
 - Collecteurs: GitHub Actions pour alimenter Neon remote, puis Data Management local pour rapatrier Neon ou lancer Databento manuellement.
 - Donnees canonisees: stockage idempotent par symbole, source, timeframe et `time_open`.
 - Interface principale cible: React/FastAPI pour le cockpit trading, la review des backtests, les dashboards analytiques de strategie et la gestion des donnees. Streamlit reste en parallele pour les pages admin/data pas encore migrees.
@@ -47,7 +47,8 @@ Court terme:
 - Finaliser une couverture live gratuite la plus large possible.
 - Utiliser GitHub Actions comme collecteur remote officiel vers Neon, avec workflow daily complet et priority free-safe.
 - Piloter les rattrapages depuis la page React `Data` via Neon par defaut, et Databento uniquement sur action manuelle.
-- Garder Neon comme entrepot 180 jours et synchroniser localement quand l'utilisateur le decide.
+- Garder Neon comme buffer recent et synchroniser localement quand l'utilisateur le decide.
+- Ne pruner Neon que si le quota devient limite, et seulement avec verification que les candles anciennes existent deja en local.
 - Utiliser le React Trading Lab pour inspecter les trades avec timeframes H4/H1/M30/M15/M5/M1, mode single chart par defaut, grille multi-timeframes optionnelle, fibo automatique limite aux timeframes pertinentes, events, entree/sortie, SL/TP et gaps.
 - Placer les elements de decision au bon endroit: OB/FVG/OTE comme zones temporelles, swings sur leurs candles de validation/structure, CRT et objectif comme niveaux dedies.
 - Lancer les backtests depuis React via Run Lab: strategie, periode, actif unique ou panier multi-actifs; chaque panier multi-actifs devient un groupe de runs comparable.

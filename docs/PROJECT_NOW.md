@@ -62,6 +62,7 @@ En place:
 - Logs JSONL et resume GitHub Actions par run.
 - Page React `Data` avec action de fetch des donnees manquantes depuis Neon, ou Databento uniquement en manuel.
 - Section `API Usage` dans `Data`: limites pratiques, decoupage courant, cout/garde-fou, actifs concernes par canal.
+- Commandes `ict live storage` et `ict live prune-remote` pour surveiller Neon et supprimer manuellement les candles anciennes seulement apres verification locale. La retention Neon cible passe a 30 jours; la retention 180 jours reste locale tant qu'une archive objet gratuite n'est pas ajoutee.
 
 Limite actuelle:
 
@@ -96,7 +97,7 @@ Decision 2026-07-07: OANDA est retire du pipeline operationnel. La source est ga
 ## Questions Ouvertes
 
 - Pour MNQ, garde-t-on Databento tant que les credits existent, ou ajoute-t-on un proxy NAS100 separe pour les tests gratuits ?
-- Surveiller si 180 jours Neon pour 32 actifs cloud-compatibles gratuits depasse le free tier; ajouter R2 ou prioriser si necessaire.
+- Ajouter une archive remote gratuite compressee type R2/Parquet ou une strategie multi-projets Neon si l'on veut vraiment 180 jours remote pour tout l'univers.
 - Quelles pages Streamlit doivent etre migrees en priorite dans React apres la review trade et les analytics de strategie ?
 - Quels diagnostics strategie doivent devenir des analyses avancees ou un modele ML quand le volume de trades sera suffisant ?
 - Ajouter une configuration explicite de tick size par symbole dans `configs/symbols.yaml` pour remplacer les fallbacks de securite.

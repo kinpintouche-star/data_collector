@@ -32,7 +32,7 @@ def load_live_sources(path: str | Path = "configs/live_sources.yaml") -> list[Li
     defaults = {
         "timeframe": payload.get("default_timeframe", "M1"),
         "poll_interval_minutes": int(payload.get("default_poll_interval_minutes", 1440)),
-        "retention_days": int(payload.get("default_retention_days", 180)),
+        "retention_days": int(payload.get("default_retention_days", 30)),
         "collection_mode": payload.get("default_collection_mode", "daily"),
     }
     sources = []

@@ -139,6 +139,10 @@ Correction d'architecture: le collecteur live ne doit pas tourner sur le PC loca
 
 Decision 2026-07-08: Oracle/VM Docker n'est pas retenu car l'essai Always Free indiquait un cout potentiel de boot volume. Les ressources Oracle creees pendant l'essai ont ete nettoyees. Le chemin officiel devient GitHub Actions -> Neon, avec workflow daily complet, workflow priority free-safe, logs JSONL, bootstrap remote idempotent et sources gratuites `dukascopy_node` et `coinbase/kraken`. Databento est conserve comme canal manuel payant pour MNQ, jamais comme collecte schedulee.
 
+### Retention Neon prudente
+
+Ajout des commandes `ict live storage` et `ict live prune-remote`. Mesure reelle du 2026-07-08: 2 264 673 candles crypto occupent environ 472.8 MB dans `live_market_candles`, proche du quota Neon Free. La retention Neon cible passe donc a 30 jours; le prune est manuel, en dry-run par defaut, et verifie que les candles candidates existent deja dans la base locale avant suppression.
+
 ## Jalons A Venir
 
 ### Extension live vers 40 actifs

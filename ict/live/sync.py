@@ -33,6 +33,28 @@ class LiveSyncResult:
         }
 
 
+@dataclass(frozen=True)
+class RemotePruneResult:
+    dry_run: bool
+    cutoff: datetime
+    require_local: bool
+    candidate_rows: int
+    deleted_rows: int
+    blocked_rows: int
+    groups: list[dict]
+
+    def as_dict(self) -> dict:
+        return {
+            "dry_run": self.dry_run,
+            "cutoff": self.cutoff,
+            "require_local": self.require_local,
+            "candidate_rows": self.candidate_rows,
+            "deleted_rows": self.deleted_rows,
+            "blocked_rows": self.blocked_rows,
+            "groups": self.groups,
+        }
+
+
 def sync_remote_candles(
     remote_database_url: str,
     since: datetime | None = None,
@@ -44,6 +66,122 @@ def sync_remote_candles(
     return upsert_remote_frame(frame)
 
 
+def remote_storage_usage(remote_database_url: str) -> dict:
+    size_query = text(
+        """
+        SELECT
+            pg_relation_size('live_market_candles'::regclass)::bigint AS heap_bytes,
+            (pg_indexes_size('live_market_candles'::regclass))::bigint AS index_bytes,
+            pg_total_relation_size('live_market_candles'::regclass)::bigint AS total_bytes,
+            COUNT(*)::bigint AS rows
+        FROM live_market_candles
+        """
+    )
+    source_query = text(
+        """
+        SELECT
+            s.symbol_code,
+            ds.name AS source_name,
+            css.source_symbol,
+            css.timeframe,
+            css.enabled,
+            css.collection_mode,
+            COUNT(lmc.time_open)::bigint AS rows,
+            MIN(lmc.time_open) AS first_candle_time,
+            MAX(lmc.time_open) AS last_candle_time
+        FROM collector_source_state css
+        JOIN symbols s ON s.id = css.symbol_id
+        JOIN data_sources ds ON ds.id = css.source_id
+        LEFT JOIN live_market_candles lmc ON lmc.source_state_id = css.id
+        GROUP BY s.symbol_code, ds.name, css.source_symbol, css.timeframe, css.enabled, css.collection_mode
+        ORDER BY css.enabled DESC, s.symbol_code, ds.name, css.timeframe
+        """
+    )
+    with build_engine(remote_database_url).connect() as connection:
+        size = dict(connection.execute(size_query).mappings().one())
+        sources = [dict(row) for row in connection.execute(source_query).mappings()]
+    return {
+        "live_market_candles": {
+            "rows": int(size["rows"] or 0),
+            "heap_bytes": int(size["heap_bytes"] or 0),
+            "index_bytes": int(size["index_bytes"] or 0),
+            "total_bytes": int(size["total_bytes"] or 0),
+        },
+        "sources": sources,
+    }
+
+
+def prune_remote_candles(
+    remote_database_url: str,
+    cutoff: datetime,
+    symbols: Iterable[str] | None = None,
+    require_local: bool = True,
+    dry_run: bool = True,
+) -> RemotePruneResult:
+    cutoff = _utc_dt(cutoff)
+    candidates = _remote_prune_candidates(remote_database_url, cutoff, symbols)
+    groups = []
+    deleted_rows = 0
+    blocked_rows = 0
+    with build_engine(remote_database_url).begin() as remote_connection:
+        for candidate in candidates:
+            local_rows = None
+            safe_to_delete = True
+            reason = None
+            if require_local:
+                local_rows = _count_local_candles_for_candidate(candidate, cutoff)
+                safe_to_delete = local_rows >= int(candidate["rows"])
+                reason = None if safe_to_delete else "local_copy_incomplete"
+
+            deleted = 0
+            if safe_to_delete and not dry_run:
+                deleted = int(
+                    remote_connection.execute(
+                        text(
+                            """
+                            DELETE FROM live_market_candles
+                            WHERE source_state_id = CAST(:source_state_id AS uuid)
+                                AND time_open < :cutoff
+                            """
+                        ),
+                        {"source_state_id": candidate["source_state_id"], "cutoff": cutoff},
+                    ).rowcount
+                    or 0
+                )
+                deleted_rows += deleted
+            elif not safe_to_delete:
+                blocked_rows += int(candidate["rows"])
+
+            groups.append(
+                {
+                    "symbol_code": candidate["symbol_code"],
+                    "source_name": candidate["source_name"],
+                    "source_symbol": candidate["source_symbol"],
+                    "timeframe": candidate["timeframe"],
+                    "remote_rows": int(candidate["rows"]),
+                    "local_rows": local_rows,
+                    "first_candle_time": candidate["first_candle_time"],
+                    "last_candle_time": candidate["last_candle_time"],
+                    "safe_to_delete": safe_to_delete,
+                    "dry_run": dry_run,
+                    "deleted_rows": deleted,
+                    "reason": reason,
+                }
+            )
+
+    if deleted_rows:
+        refresh_remote_source_state(remote_database_url, symbols=symbols)
+    return RemotePruneResult(
+        dry_run=dry_run,
+        cutoff=cutoff,
+        require_local=require_local,
+        candidate_rows=sum(int(row["rows"]) for row in candidates),
+        deleted_rows=deleted_rows,
+        blocked_rows=blocked_rows,
+        groups=groups,
+    )
+
+
 def sync_local_candles_to_remote(
     remote_database_url: str,
     since: datetime | None = None,
@@ -51,7 +189,7 @@ def sync_local_candles_to_remote(
     symbols: Iterable[str] | None = None,
     limit: int = 250000,
     chunk_days: int = 7,
-    retention_days: int = 180,
+    retention_days: int = 30,
     config: str = "configs/live_sources.yaml",
 ) -> LiveSyncResult:
     end = _utc_dt(until) if until else datetime.now(timezone.utc)
@@ -82,6 +220,77 @@ def sync_local_candles_to_remote(
     if result.rows_written:
         refresh_remote_source_state(remote_database_url, symbols=symbols, config=config)
     return result
+
+
+def _remote_prune_candidates(
+    remote_database_url: str,
+    cutoff: datetime,
+    symbols: Iterable[str] | None,
+) -> list[dict]:
+    symbol_list = [symbol.strip().upper() for symbol in symbols or [] if symbol.strip()]
+    params: dict[str, object] = {"cutoff": cutoff}
+    symbol_filter = ""
+    if symbol_list:
+        placeholders = []
+        for index, symbol in enumerate(symbol_list):
+            key = f"symbol_{index}"
+            placeholders.append(f":{key}")
+            params[key] = symbol
+        symbol_filter = f"AND s.symbol_code IN ({', '.join(placeholders)})"
+    query = text(
+        f"""
+        SELECT
+            css.id::text AS source_state_id,
+            s.symbol_code,
+            ds.name AS source_name,
+            css.source_symbol,
+            css.timeframe,
+            COUNT(lmc.time_open)::bigint AS rows,
+            MIN(lmc.time_open) AS first_candle_time,
+            MAX(lmc.time_open) AS last_candle_time
+        FROM live_market_candles lmc
+        JOIN collector_source_state css ON css.id = lmc.source_state_id
+        JOIN symbols s ON s.id = css.symbol_id
+        JOIN data_sources ds ON ds.id = css.source_id
+        WHERE lmc.time_open < :cutoff
+            {symbol_filter}
+        GROUP BY css.id, s.symbol_code, ds.name, css.source_symbol, css.timeframe
+        HAVING COUNT(lmc.time_open) > 0
+        ORDER BY s.symbol_code, ds.name, css.timeframe
+        """
+    )
+    with build_engine(remote_database_url).connect() as connection:
+        return [dict(row) for row in connection.execute(query, params).mappings()]
+
+
+def _count_local_candles_for_candidate(candidate: dict, cutoff: datetime) -> int:
+    query = text(
+        """
+        SELECT COUNT(c.id)::bigint
+        FROM market_candles c
+        JOIN symbols s ON s.id = c.symbol_id
+        JOIN data_sources ds ON ds.id = c.source_id
+        WHERE s.symbol_code = :symbol_code
+            AND ds.name = :source_name
+            AND c.source_symbol = :source_symbol
+            AND c.timeframe = :timeframe
+            AND c.time_open < :cutoff
+        """
+    )
+    with build_engine().connect() as connection:
+        return int(
+            connection.execute(
+                query,
+                {
+                    "symbol_code": candidate["symbol_code"],
+                    "source_name": candidate["source_name"],
+                    "source_symbol": candidate["source_symbol"],
+                    "timeframe": str(candidate["timeframe"]).upper(),
+                    "cutoff": cutoff,
+                },
+            ).scalar_one()
+            or 0
+        )
 
 
 def read_remote_candles(

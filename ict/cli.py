@@ -38,7 +38,7 @@ from ict.db.session import build_engine, session_scope
 from ict.live.collector import collect_remote_live
 from ict.live.config import load_live_sources
 from ict.live.providers import discover_oanda_instruments
-from ict.live.sync import sync_local_candles_to_remote, sync_remote_candles
+from ict.live.sync import prune_remote_candles, remote_storage_usage, sync_local_candles_to_remote, sync_remote_candles
 from ict.strategy.params import StrategyParams, load_strategy_params
 
 app = typer.Typer(help="ICT CRT M1 backtesting platform")
@@ -1068,7 +1068,7 @@ def live_sync(
     symbols: Optional[str] = typer.Option(None, "--symbols"),
     limit: int = typer.Option(250000, "--limit"),
     chunk_days: int = typer.Option(7, "--chunk-days"),
-    retention_days: int = typer.Option(180, "--retention-days"),
+    retention_days: int = typer.Option(30, "--retention-days"),
     config: str = typer.Option("configs/live_sources.yaml", "--config"),
 ) -> None:
     if from_remote == to_remote:
@@ -1093,6 +1093,37 @@ def live_sync(
             retention_days=retention_days,
             config=config,
         )
+    _print_json(result.as_dict())
+
+
+@live_app.command("storage")
+def live_storage(
+    remote_database_url: Optional[str] = typer.Option(None, "--remote-database-url"),
+) -> None:
+    remote_url = _remote_database_url(remote_database_url)
+    _print_json(remote_storage_usage(remote_url))
+
+
+@live_app.command("prune-remote")
+def live_prune_remote(
+    remote_database_url: Optional[str] = typer.Option(None, "--remote-database-url"),
+    older_than: Optional[str] = typer.Option(None, "--older-than"),
+    retention_days: int = typer.Option(30, "--retention-days"),
+    symbols: Optional[str] = typer.Option(None, "--symbols"),
+    require_local: bool = typer.Option(True, "--require-local/--no-require-local"),
+    execute: bool = typer.Option(False, "--execute/--dry-run"),
+) -> None:
+    if older_than:
+        cutoff = _parse_date(older_than)
+    else:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+    result = prune_remote_candles(
+        _remote_database_url(remote_database_url),
+        cutoff=cutoff,
+        symbols=_csv_values(symbols) if symbols else None,
+        require_local=require_local,
+        dry_run=not execute,
+    )
     _print_json(result.as_dict())
 
 

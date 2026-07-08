@@ -33,7 +33,7 @@ def test_live_sources_config_defaults_to_daily_six_month_retention() -> None:
     assert mnq.dataset == "GLBX.MDP3"
     assert mnq.max_cost_usd == 1.0
     assert {source.poll_interval_minutes for source in sources} == {1440}
-    assert {source.retention_days for source in sources} == {180}
+    assert {source.retention_days for source in sources} == {30}
     assert {source.symbol_code for source in sources if source.priority == 10} == {
         "EURUSD",
         "GER40",

@@ -5,7 +5,7 @@ Le collecteur live officiel utilise maintenant **GitHub Actions -> Neon**. Il ma
 ## Architecture
 
 - GitHub Actions est le runtime remote officiel v1.
-- Neon Postgres stocke les candles compactes dans `live_market_candles`, plus `collector_runs`, `collector_source_state` et `collector_incidents`.
+- Neon Postgres stocke les candles compactes recentes dans `live_market_candles`, plus `collector_runs`, `collector_source_state` et `collector_incidents`.
 - La base locale Postgres reste la source canonique pour les backtests, dashboards et archives longues.
 - Cloudflare Worker, Oracle VM et Docker remote collector sont legacy: ils ne sont plus le chemin operationnel.
 - R2/object storage est reporte; v1 reste en Neon compact SQL uniquement.
@@ -122,12 +122,33 @@ Commandes utiles:
 python -m ict.cli live status --remote-database-url $env:LIVE_REMOTE_DATABASE_URL
 python -m ict.cli live incidents --remote-database-url $env:LIVE_REMOTE_DATABASE_URL
 python -m ict.cli live sources --enabled-only
+python -m ict.cli live storage --remote-database-url $env:LIVE_REMOTE_DATABASE_URL
 ```
 
 Dans l'UI:
 
 - page `Data`: couverture locale, dernier candle Neon, fetch Neon pour les actifs gratuits, fetch Databento manuel pour MNQ;
 - page `Live Collector` legacy Streamlit: runs, incidents, lag par source.
+
+## Retention Neon
+
+Objectif par defaut apres mesure reelle: garder environ 30 jours M1 dans Neon comme buffer remote. La base locale reste l'archive 180 jours+ pour les backtests.
+
+Pourquoi pas 180 jours dans Neon: le 2026-07-08, `live_market_candles` contenait deja 2 264 673 candles crypto pour environ 472.8 MB, proche du quota Neon Free de 0.5 GB par projet. Un seul projet Neon Free ne peut donc pas garder 180 jours M1 pour tout l'univers de 32 actifs cloud gratuits.
+
+Pour garder Neon sous controle, utiliser un prune manuel et verifie:
+
+```powershell
+# Dry-run par defaut: ne supprime rien.
+python -m ict.cli live prune-remote --remote-database-url $env:LIVE_REMOTE_DATABASE_URL --retention-days 30
+
+# Suppression effective seulement apres verification locale.
+python -m ict.cli live prune-remote --remote-database-url $env:LIVE_REMOTE_DATABASE_URL --retention-days 30 --execute
+```
+
+La commande garde `--require-local` active par defaut: un groupe de candles n'est supprimable de Neon que si la base locale contient au moins autant de candles pour le meme symbole, source, source_symbol, timeframe et cutoff. Pour forcer une suppression sans cette verification, il faut passer explicitement `--no-require-local`.
+
+Si l'objectif reste 180 jours disponibles sur un service gratuit, il faut ajouter une archive objet compressee type Cloudflare R2/Parquet, ou plusieurs projets Neon segmentes par groupe d'actifs. Neon seul doit rester un buffer SQL recent.
 
 ## Legacy
 

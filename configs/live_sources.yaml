@@ -2,7 +2,7 @@ name: github_actions_live_v1
 default_timeframe: M1
 default_collection_mode: daily
 default_poll_interval_minutes: 1440
-default_retention_days: 180
+default_retention_days: 30
 default_overlap_minutes: 15
 assets:
   - symbol_code: EURUSD

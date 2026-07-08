@@ -39,7 +39,8 @@ Streamlit reste disponible hors compose principal pour les pages admin/data hist
 ## Decisions Documentees
 
 - La base locale Postgres reste la source canonique pour les backtests et dashboards.
-- Neon sert d'entrepot/buffer remote, avec objectif 180 jours M1 quand possible, mais ne remplace pas la base locale.
+- Neon sert d'entrepot/buffer remote recent, avec cible 30 jours dans le projet Free actuel; il ne remplace pas la base locale 180 jours+.
+- La retention Neon se surveille via `ict live storage`; le prune remote est manuel et verifie la presence locale des candles par defaut.
 - React/FastAPI est la cible long terme pour l'outil principal.
 - Strategy Builder v1 utilise des blocs ordonnes ICT/SMC; le canvas type noeuds viendra apres stabilisation du pipeline.
 - Streamlit reste temporaire pour les pages data/admin tant qu'elles ne sont pas migrees.

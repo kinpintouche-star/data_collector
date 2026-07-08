@@ -55,7 +55,7 @@
         <mxCell id="external" value="Services externes / Sources de donnees" style="swimlane;html=1;whiteSpace=wrap;startSize=38;fillColor=#f8fafc;strokeColor=#64748b;fontStyle=1;fontSize=15;" vertex="1" parent="1">
           <mxGeometry x="1120" y="130" width="420" height="720" as="geometry" />
         </mxCell>
-        <mxCell id="neon" value="Neon Postgres remote&#xa;Role actuel: warehouse/buffer live&#xa;Env: LIVE_REMOTE_DATABASE_URL&#xa;Objectif: rolling 180 jours M1 cote service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ccfbf1;strokeColor=#0d9488;fontSize=13;fontStyle=1;align=left;spacing=8;" vertex="1" parent="external">
+        <mxCell id="neon" value="Neon Postgres remote&#xa;Role actuel: buffer live recent&#xa;Env: LIVE_REMOTE_DATABASE_URL&#xa;Objectif actuel: rolling 30 jours M1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ccfbf1;strokeColor=#0d9488;fontSize=13;fontStyle=1;align=left;spacing=8;" vertex="1" parent="external">
           <mxGeometry x="40" y="70" width="340" height="100" as="geometry" />
         </mxCell>
         <mxCell id="github-actions" value="GitHub Actions collector officiel&#xa;Daily complet + priority free-safe&#xa;Ecrit dans Neon en chunks idempotents&#xa;Logs JSONL + GitHub summary" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e5e7eb;strokeColor=#111827;fontSize=13;fontStyle=1;align=left;spacing=8;" vertex="1" parent="external">
@@ -111,7 +111,7 @@
         <mxCell id="legend" value="Legende&#xa;Trait plein: chemin principal runtime&#xa;Trait pointille: chemin admin/sync/backfill&#xa;Orange: stockage canonique&#xa;Bleu/vert: API/UI&#xa;Violet: acquisition externe" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#94a3b8;fontSize=12;align=left;spacing=8;" vertex="1" parent="1">
           <mxGeometry x="40" y="880" width="410" height="120" as="geometry" />
         </mxCell>
-        <mxCell id="current-limits" value="Limites / decisions actuelles&#xa;- Postgres local reste la base canonique.&#xa;- Neon sert d'entrepot/buffer remote, pas de source principale de backtest.&#xa;- GitHub Actions est le collecteur remote officiel.&#xa;- Oracle VM / Docker remote / Cloudflare sont legacy.&#xa;- OANDA est retire du pipeline operationnel." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fefce8;strokeColor=#ca8a04;fontSize=12;align=left;spacing=8;" vertex="1" parent="1">
+        <mxCell id="current-limits" value="Limites / decisions actuelles&#xa;- Postgres local reste la base canonique.&#xa;- Neon sert de buffer recent ~30 jours, pas de source principale de backtest.&#xa;- 180 jours+ restent locaux tant qu'une archive remote compressee n'est pas ajoutee.&#xa;- GitHub Actions est le collecteur remote officiel.&#xa;- Oracle VM / Docker remote / Cloudflare sont legacy.&#xa;- OANDA est retire du pipeline operationnel." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fefce8;strokeColor=#ca8a04;fontSize=12;align=left;spacing=8;" vertex="1" parent="1">
           <mxGeometry x="480" y="880" width="540" height="120" as="geometry" />
         </mxCell>
         <mxCell id="update-rule" value="Regle de maintenance&#xa;Quand un service, un container, une source de donnees ou un flux critique change, mettre a jour:&#xa;1. docs/ARCHITECTURE_CURRENT.drawio&#xa;2. docs/ARCHITECTURE.md&#xa;3. docs/PROJECT_NOW.md / PROJECT_THREAD.md si le jalon change" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ecfeff;strokeColor=#0891b2;fontSize=12;align=left;spacing=8;" vertex="1" parent="1">
