@@ -63,6 +63,33 @@ def test_archive_export_restore_roundtrip(tmp_path, monkeypatch) -> None:
     assert captured["frame"].iloc[0]["metadata"]["provider"] == "coinbase"
 
 
+def test_archive_bucket_usage_counts_objects(tmp_path) -> None:
+    object_store = archive_store.LocalObjectStore(tmp_path)
+    object_store.put_bytes("market-candles/a.bin", b"abc")
+    object_store.put_bytes("market-candles/b.bin", b"abcd")
+
+    usage = archive_store.archive_bucket_usage(store=object_store, prefix="market-candles", max_bytes=10)
+
+    assert usage.object_count == 2
+    assert usage.total_bytes == 7
+    assert usage.remaining_bytes == 3
+    assert usage.as_dict()["over_limit"] is False
+
+
+def test_archive_export_rejects_bucket_budget_excess(tmp_path) -> None:
+    key = b"2" * 32
+    object_store = archive_store.LocalObjectStore(tmp_path)
+
+    try:
+        archive_store.export_frame_to_store(_frame(), object_store, key, max_bucket_bytes=1)
+    except ValueError as exc:
+        assert "R2 archive bucket budget would be exceeded" in str(exc)
+    else:
+        raise AssertionError("export_frame_to_store should reject an over-budget upload")
+
+    assert object_store.list_keys("") == []
+
+
 def test_archive_restore_rejects_wrong_manifest_format(tmp_path) -> None:
     key = b"1" * 32
     object_store = archive_store.LocalObjectStore(tmp_path)

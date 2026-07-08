@@ -17,6 +17,7 @@ from rich.console import Console
 from sqlalchemy import text
 
 from ict.archive.store import (
+    archive_bucket_usage,
     archive_configured,
     archive_status as r2_archive_status,
     collect_live_sources_to_r2,
@@ -1145,6 +1146,7 @@ def archive_configured_command() -> None:
             "r2_access_key_id": bool(settings.r2_access_key_id),
             "r2_secret_access_key": bool(settings.r2_secret_access_key),
             "market_archive_key": bool(settings.market_archive_key),
+            "max_bucket_gb": settings.market_archive_max_bucket_gb,
             "prefix": settings.market_archive_prefix,
             "cache_dir": settings.market_archive_cache_dir,
         }
@@ -1161,6 +1163,7 @@ def archive_collect_to_r2(
     max_workers: int = typer.Option(1, "--max-workers"),
     submit_pause_seconds: float = typer.Option(0.25, "--submit-pause-seconds"),
     max_upload_mb: float = typer.Option(256.0, "--max-upload-mb"),
+    max_bucket_gb: Optional[float] = typer.Option(None, "--max-bucket-gb"),
     emit_jsonl: bool = typer.Option(False, "--emit-jsonl/--no-jsonl"),
     log_path: Optional[str] = typer.Option(None, "--log-path"),
     dry_run: bool = typer.Option(False, "--dry-run"),
@@ -1175,6 +1178,7 @@ def archive_collect_to_r2(
         max_workers=max_workers,
         submit_pause_seconds=submit_pause_seconds,
         max_upload_mb=max_upload_mb,
+        max_bucket_gb=max_bucket_gb,
         dry_run=dry_run,
         log_path=effective_log_path,
     )
@@ -1191,6 +1195,7 @@ def archive_export_to_r2(
     timeframe: str = typer.Option("M1", "--timeframe"),
     limit: int = typer.Option(500000, "--limit"),
     max_upload_mb: float = typer.Option(256.0, "--max-upload-mb"),
+    max_bucket_gb: Optional[float] = typer.Option(None, "--max-bucket-gb"),
 ) -> None:
     """Legacy/transition helper: archive candles already present in Neon."""
 
@@ -1203,6 +1208,7 @@ def archive_export_to_r2(
         timeframe=timeframe.upper(),
         limit=limit,
         max_upload_mb=max_upload_mb,
+        max_bucket_gb=max_bucket_gb,
     )
     _print_json(result.as_dict())
 
@@ -1267,7 +1273,14 @@ def archive_status_command(
                 **rows.get((source.symbol_code.upper(), source.source_name), {}),
             }
         )
-    _print_json({"configured": archive_configured(), "assets": len(statuses), "rows": statuses})
+    settings = get_settings()
+    bucket_limit_bytes = (
+        int(settings.market_archive_max_bucket_gb * 1024 * 1024 * 1024)
+        if settings.market_archive_max_bucket_gb > 0
+        else None
+    )
+    usage = archive_bucket_usage(max_bytes=bucket_limit_bytes).as_dict() if archive_configured() else None
+    _print_json({"configured": archive_configured(), "bucket_usage": usage, "assets": len(statuses), "rows": statuses})
 
 
 @archive_app.command("verify")

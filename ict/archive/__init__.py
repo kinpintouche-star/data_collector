@@ -3,6 +3,7 @@
 from ict.archive.store import (
     ArchiveExportResult,
     ArchiveRestoreResult,
+    archive_bucket_usage,
     archive_configured,
     archive_status,
     collect_live_sources_to_r2,
@@ -14,6 +15,7 @@ from ict.archive.store import (
 __all__ = [
     "ArchiveExportResult",
     "ArchiveRestoreResult",
+    "archive_bucket_usage",
     "archive_configured",
     "archive_status",
     "collect_live_sources_to_r2",

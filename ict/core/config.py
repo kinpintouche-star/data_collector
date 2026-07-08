@@ -29,6 +29,7 @@ if BaseSettings is not None:
         live_remote_database_url: Optional[str] = Field(default=None, alias="LIVE_REMOTE_DATABASE_URL")  # type: ignore[misc]
         market_archive_key: Optional[str] = Field(default=None, alias="MARKET_ARCHIVE_KEY")  # type: ignore[misc]
         market_archive_cache_dir: str = Field(default=".cache/market_archive", alias="MARKET_ARCHIVE_CACHE_DIR")  # type: ignore[misc]
+        market_archive_max_bucket_gb: float = Field(default=10.0, alias="MARKET_ARCHIVE_MAX_BUCKET_GB")  # type: ignore[misc]
         market_archive_prefix: str = Field(default="market-candles", alias="MARKET_ARCHIVE_PREFIX")  # type: ignore[misc]
         r2_account_id: Optional[str] = Field(default=None, alias="R2_ACCOUNT_ID")  # type: ignore[misc]
         r2_access_key_id: Optional[str] = Field(default=None, alias="R2_ACCESS_KEY_ID")  # type: ignore[misc]
@@ -55,6 +56,7 @@ else:
         live_remote_database_url: Optional[str] = os.getenv("LIVE_REMOTE_DATABASE_URL")
         market_archive_key: Optional[str] = os.getenv("MARKET_ARCHIVE_KEY")
         market_archive_cache_dir: str = os.getenv("MARKET_ARCHIVE_CACHE_DIR", ".cache/market_archive")
+        market_archive_max_bucket_gb: float = float(os.getenv("MARKET_ARCHIVE_MAX_BUCKET_GB", "10"))
         market_archive_prefix: str = os.getenv("MARKET_ARCHIVE_PREFIX", "market-candles")
         r2_account_id: Optional[str] = os.getenv("R2_ACCOUNT_ID")
         r2_access_key_id: Optional[str] = os.getenv("R2_ACCESS_KEY_ID")

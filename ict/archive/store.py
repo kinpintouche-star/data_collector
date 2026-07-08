@@ -57,6 +57,54 @@ class ObjectStore(Protocol):
     def list_keys(self, prefix: str) -> list[str]:
         ...
 
+    def list_objects(self, prefix: str) -> list["ObjectSummary"]:
+        ...
+
+    def get_object_size(self, key: str) -> int:
+        ...
+
+
+@dataclass(frozen=True)
+class ObjectSummary:
+    key: str
+    size: int
+
+
+@dataclass(frozen=True)
+class ArchiveBucketUsage:
+    bucket: str
+    prefix: str
+    object_count: int
+    total_bytes: int
+    max_bytes: int | None = None
+
+    @property
+    def remaining_bytes(self) -> int | None:
+        if self.max_bytes is None:
+            return None
+        return self.max_bytes - self.total_bytes
+
+    @property
+    def usage_ratio(self) -> float | None:
+        if not self.max_bytes:
+            return None
+        return self.total_bytes / self.max_bytes
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "bucket": self.bucket,
+            "prefix": self.prefix,
+            "object_count": self.object_count,
+            "total_bytes": self.total_bytes,
+            "total_gb": self.total_bytes / (1024**3),
+            "max_bytes": self.max_bytes,
+            "max_gb": self.max_bytes / (1024**3) if self.max_bytes is not None else None,
+            "remaining_bytes": self.remaining_bytes,
+            "remaining_gb": self.remaining_bytes / (1024**3) if self.remaining_bytes is not None else None,
+            "usage_ratio": self.usage_ratio,
+            "over_limit": self.max_bytes is not None and self.total_bytes > self.max_bytes,
+        }
+
 
 @dataclass(frozen=True)
 class ArchivePartition:
@@ -181,9 +229,12 @@ class ArchiveCollectionResult:
     partitions_written: int
     encrypted_bytes: int
     results: list[ArchiveAssetResult]
+    bucket_usage_before_bytes: int | None = None
+    bucket_usage_after_bytes: int | None = None
+    bucket_limit_bytes: int | None = None
 
     def as_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "status": self.status,
             "since": self.since,
             "until": self.until,
@@ -195,6 +246,14 @@ class ArchiveCollectionResult:
             "encrypted_bytes": self.encrypted_bytes,
             "results": [result.as_dict() for result in self.results],
         }
+        if self.bucket_usage_before_bytes is not None:
+            payload["bucket_usage_before_bytes"] = self.bucket_usage_before_bytes
+        if self.bucket_usage_after_bytes is not None:
+            payload["bucket_usage_after_bytes"] = self.bucket_usage_after_bytes
+        if self.bucket_limit_bytes is not None:
+            payload["bucket_limit_bytes"] = self.bucket_limit_bytes
+            payload["bucket_limit_gb"] = self.bucket_limit_bytes / (1024**3)
+        return payload
 
 
 class R2ObjectStore:
@@ -235,11 +294,27 @@ class R2ObjectStore:
             raise
 
     def list_keys(self, prefix: str) -> list[str]:
-        keys: list[str] = []
+        return [item.key for item in self.list_objects(prefix)]
+
+    def list_objects(self, prefix: str) -> list[ObjectSummary]:
+        objects: list[ObjectSummary] = []
         paginator = self.client.get_paginator("list_objects_v2")
         for page in paginator.paginate(Bucket=self.bucket, Prefix=prefix):
-            keys.extend(item["Key"] for item in page.get("Contents", []))
-        return keys
+            objects.extend(
+                ObjectSummary(key=str(item["Key"]), size=int(item.get("Size") or 0))
+                for item in page.get("Contents", [])
+            )
+        return objects
+
+    def get_object_size(self, key: str) -> int:
+        try:
+            response = self.client.head_object(Bucket=self.bucket, Key=key)
+            return int(response.get("ContentLength") or 0)
+        except Exception as exc:
+            code = getattr(exc, "response", {}).get("Error", {}).get("Code")
+            if code in {"NoSuchKey", "404", "NotFound"}:
+                raise FileNotFoundError(key) from exc
+            raise
 
 
 class LocalObjectStore:
@@ -258,10 +333,23 @@ class LocalObjectStore:
         return (self.root / key).read_bytes()
 
     def list_keys(self, prefix: str) -> list[str]:
+        return [item.key for item in self.list_objects(prefix)]
+
+    def list_objects(self, prefix: str) -> list[ObjectSummary]:
         root = self.root / prefix
         if not root.exists():
             return []
-        return [path.relative_to(self.root).as_posix() for path in root.rglob("*") if path.is_file()]
+        return [
+            ObjectSummary(key=path.relative_to(self.root).as_posix(), size=path.stat().st_size)
+            for path in root.rglob("*")
+            if path.is_file()
+        ]
+
+    def get_object_size(self, key: str) -> int:
+        path = self.root / key
+        if not path.exists():
+            raise FileNotFoundError(key)
+        return path.stat().st_size
 
 
 def archive_configured() -> bool:
@@ -275,6 +363,24 @@ def archive_configured() -> bool:
     )
 
 
+def archive_bucket_usage(
+    store: ObjectStore | None = None,
+    prefix: str = "",
+    max_bytes: int | None = None,
+) -> ArchiveBucketUsage:
+    if store is None and not archive_configured():
+        return ArchiveBucketUsage(bucket="", prefix=prefix, object_count=0, total_bytes=0, max_bytes=max_bytes)
+    store = store or _r2_store_from_settings()
+    objects = store.list_objects(prefix)
+    return ArchiveBucketUsage(
+        bucket=store.bucket,
+        prefix=prefix,
+        object_count=len(objects),
+        total_bytes=sum(item.size for item in objects),
+        max_bytes=max_bytes,
+    )
+
+
 def collect_live_sources_to_r2(
     *,
     since: datetime | None = None,
@@ -285,6 +391,7 @@ def collect_live_sources_to_r2(
     max_workers: int = 4,
     submit_pause_seconds: float = 0.25,
     max_upload_mb: float = 512,
+    max_bucket_gb: float | None = None,
     dry_run: bool = False,
     log_path: str | Path | None = None,
     store: ObjectStore | None = None,
@@ -326,8 +433,10 @@ def collect_live_sources_to_r2(
     store = store or _r2_store_from_settings()
     archive_key = archive_key or _archive_key_from_settings()
     prefix = _clean_prefix(prefix or get_settings().market_archive_prefix)
+    max_bucket_bytes = _max_bucket_bytes(max_bucket_gb)
+    bucket_usage_before = archive_bucket_usage(store=store, prefix="", max_bytes=max_bucket_bytes)
     results: list[ArchiveAssetResult] = []
-    max_workers = max(1, min(max_workers, max(1, len(sources))))
+    max_workers = 1 if max_bucket_bytes is not None else max(1, min(max_workers, max(1, len(sources))))
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {}
@@ -348,6 +457,7 @@ def collect_live_sources_to_r2(
                     archive_key=archive_key,
                     prefix=prefix,
                     max_upload_mb=max_upload_mb,
+                    max_bucket_bytes=max_bucket_bytes,
                 )
             except Exception as exc:  # noqa: BLE001 - per-asset failure is logged and summarized
                 result = ArchiveAssetResult(
@@ -368,7 +478,16 @@ def collect_live_sources_to_r2(
                 **result.as_dict(),
             )
 
-    summary = _archive_collection_summary("completed", start, end, results)
+    bucket_usage_after = archive_bucket_usage(store=store, prefix="", max_bytes=max_bucket_bytes)
+    summary = _archive_collection_summary(
+        "completed",
+        start,
+        end,
+        results,
+        bucket_usage_before_bytes=bucket_usage_before.total_bytes,
+        bucket_usage_after_bytes=bucket_usage_after.total_bytes,
+        bucket_limit_bytes=max_bucket_bytes,
+    )
     logger.emit("archive_run_completed", **_archive_summary_log(summary))
     return summary
 
@@ -381,6 +500,7 @@ def archive_asset_frame(
     archive_key: bytes,
     prefix: str,
     max_upload_mb: float,
+    max_bucket_bytes: int | None = None,
 ) -> ArchiveAssetResult:
     if frame.empty:
         return ArchiveAssetResult(
@@ -402,6 +522,7 @@ def archive_asset_frame(
         prefix=prefix,
         max_partitions=7,
         max_upload_bytes=int(max_upload_mb * 1024 * 1024),
+        max_bucket_bytes=max_bucket_bytes,
     )
     return ArchiveAssetResult(
         symbol_code=source.symbol_code,
@@ -427,6 +548,7 @@ def export_remote_to_r2(
     limit: int = 500000,
     max_partitions: int = 500,
     max_upload_mb: float = 512,
+    max_bucket_gb: float | None = None,
     store: ObjectStore | None = None,
     archive_key: bytes | None = None,
     prefix: str | None = None,
@@ -451,6 +573,7 @@ def export_remote_to_r2(
         prefix=prefix,
         max_partitions=max_partitions,
         max_upload_bytes=int(max_upload_mb * 1024 * 1024),
+        max_bucket_bytes=_max_bucket_bytes(max_bucket_gb),
     )
     return ArchiveExportResult(
         status="completed" if partitions else "empty",
@@ -468,6 +591,7 @@ def export_frame_to_store(
     prefix: str = "market-candles",
     max_partitions: int = 500,
     max_upload_bytes: int = 512 * 1024 * 1024,
+    max_bucket_bytes: int | None = None,
 ) -> list[ArchivePartition]:
     if frame.empty:
         return []
@@ -512,6 +636,7 @@ def export_frame_to_store(
         )
         prepared.append((partition, encrypted_payload, _json_bytes(manifest)))
 
+    _enforce_bucket_budget(store, prepared, max_bucket_bytes)
     for partition, encrypted_payload, manifest_payload in prepared:
         store.put_bytes(partition.object_key, encrypted_payload)
         store.put_bytes(partition.manifest_key, manifest_payload, content_type="application/json")
@@ -926,11 +1051,51 @@ def _clean_prefix(value: str) -> str:
     return value.strip().strip("/")
 
 
+def _max_bucket_bytes(max_bucket_gb: float | None = None) -> int | None:
+    value = get_settings().market_archive_max_bucket_gb if max_bucket_gb is None else max_bucket_gb
+    if value is None or value <= 0:
+        return None
+    return int(float(value) * 1024 * 1024 * 1024)
+
+
+def _enforce_bucket_budget(
+    store: ObjectStore,
+    prepared: list[tuple[ArchivePartition, bytes, bytes]],
+    max_bucket_bytes: int | None,
+) -> None:
+    if max_bucket_bytes is None or not prepared:
+        return
+    current_usage = archive_bucket_usage(store=store, prefix="", max_bytes=max_bucket_bytes)
+    replacement_bytes = 0
+    new_bytes = 0
+    for partition, encrypted_payload, manifest_payload in prepared:
+        new_bytes += len(encrypted_payload) + len(manifest_payload)
+        for key in (partition.object_key, partition.manifest_key):
+            try:
+                replacement_bytes += store.get_object_size(key)
+            except FileNotFoundError:
+                continue
+    projected_bytes = current_usage.total_bytes - replacement_bytes + new_bytes
+    if projected_bytes > max_bucket_bytes:
+        raise ValueError(
+            "R2 archive bucket budget would be exceeded. "
+            f"current_bytes={current_usage.total_bytes}, "
+            f"replacement_bytes={replacement_bytes}, "
+            f"new_bytes={new_bytes}, "
+            f"projected_bytes={projected_bytes}, "
+            f"max_bucket_bytes={max_bucket_bytes}. "
+            "Reduce the collection window, disable low-priority assets, or prune verified old partitions first."
+        )
+
+
 def _archive_collection_summary(
     status: str,
     since: datetime,
     until: datetime,
     results: list[ArchiveAssetResult],
+    bucket_usage_before_bytes: int | None = None,
+    bucket_usage_after_bytes: int | None = None,
+    bucket_limit_bytes: int | None = None,
 ) -> ArchiveCollectionResult:
     return ArchiveCollectionResult(
         status=status,
@@ -943,11 +1108,14 @@ def _archive_collection_summary(
         partitions_written=sum(result.partitions_written for result in results),
         encrypted_bytes=sum(result.encrypted_bytes for result in results),
         results=sorted(results, key=lambda result: (result.symbol_code, result.source_name)),
+        bucket_usage_before_bytes=bucket_usage_before_bytes,
+        bucket_usage_after_bytes=bucket_usage_after_bytes,
+        bucket_limit_bytes=bucket_limit_bytes,
     )
 
 
 def _archive_summary_log(summary: ArchiveCollectionResult) -> dict[str, Any]:
-    return {
+    payload = {
         "status": summary.status,
         "assets_requested": summary.assets_requested,
         "assets_succeeded": summary.assets_succeeded,
@@ -958,6 +1126,13 @@ def _archive_summary_log(summary: ArchiveCollectionResult) -> dict[str, Any]:
         "since": summary.since.isoformat(),
         "until": summary.until.isoformat(),
     }
+    if summary.bucket_usage_before_bytes is not None:
+        payload["bucket_usage_before_bytes"] = summary.bucket_usage_before_bytes
+    if summary.bucket_usage_after_bytes is not None:
+        payload["bucket_usage_after_bytes"] = summary.bucket_usage_after_bytes
+    if summary.bucket_limit_bytes is not None:
+        payload["bucket_limit_bytes"] = summary.bucket_limit_bytes
+    return payload
 
 
 def _source_payload(source: LiveSource) -> dict[str, Any]:

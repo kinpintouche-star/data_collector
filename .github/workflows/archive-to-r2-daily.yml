@@ -27,6 +27,11 @@ on:
         required: false
         default: "256"
         type: string
+      max_bucket_gb:
+        description: "Hard R2 bucket budget in GB; use 0 to disable"
+        required: false
+        default: "10"
+        type: string
       dry_run:
         description: "Validate selection without touching providers/R2"
         required: false
@@ -54,6 +59,7 @@ jobs:
       UNTIL: ${{ inputs.until }}
       MAX_WORKERS: ${{ inputs.max_workers || '1' }}
       MAX_UPLOAD_MB: ${{ inputs.max_upload_mb || '256' }}
+      MAX_BUCKET_GB: ${{ inputs.max_bucket_gb || '10' }}
       DRY_RUN: ${{ inputs.dry_run || false }}
       LOG_PATH: collector-logs/archive-to-r2-daily.jsonl
     steps:
@@ -98,7 +104,7 @@ jobs:
           fi
 
           echo "::group::Archive run"
-          args=(archive collect-to-r2 --max-workers "$MAX_WORKERS" --max-upload-mb "$MAX_UPLOAD_MB" --emit-jsonl --log-path "$LOG_PATH")
+          args=(archive collect-to-r2 --max-workers "$MAX_WORKERS" --max-upload-mb "$MAX_UPLOAD_MB" --max-bucket-gb "$MAX_BUCKET_GB" --emit-jsonl --log-path "$LOG_PATH")
           if [ "${DRY_RUN}" = "true" ]; then
             args+=(--dry-run)
           fi
@@ -135,7 +141,7 @@ jobs:
               handle.write(f"- Dry run: `{os.environ.get('DRY_RUN')}`\\n")
               handle.write(f"- Symbols input: `{os.environ.get('SYMBOLS') or 'all enabled free'}`\\n")
               if completed:
-                  for key in ["status", "assets_requested", "assets_succeeded", "assets_failed", "rows_fetched", "partitions_written", "encrypted_bytes", "since", "until"]:
+                  for key in ["status", "assets_requested", "assets_succeeded", "assets_failed", "rows_fetched", "partitions_written", "encrypted_bytes", "bucket_usage_before_bytes", "bucket_usage_after_bytes", "bucket_limit_bytes", "since", "until"]:
                       if key in completed:
                           handle.write(f"- {key}: `{completed[key]}`\\n")
               else:

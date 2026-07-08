@@ -17,6 +17,7 @@ Le but n'est pas de garder 6 mois dans Neon. Le but est d'archiver chaque jour l
 Contraintes non negociables:
 
 - gratuit d'abord;
+- bucket R2 garde sous 10 GB par defaut;
 - Databento jamais automatique;
 - pas de source payante dans les workflows schedules;
 - la base locale Postgres reste la base canonique pour backtester;
@@ -79,6 +80,17 @@ Parquet -> compression ZSTD -> chiffrement AES-256-GCM -> R2
 ```text
 MARKET_ARCHIVE_KEY=<base64 de 32 bytes>
 ```
+
+- Nouveau garde-fou de stockage:
+
+```text
+MARKET_ARCHIVE_MAX_BUCKET_GB=10
+```
+
+Le workflow quotidien passe aussi `--max-bucket-gb 10`. Avant chaque upload, le
+collecteur calcule la taille reelle du bucket R2, soustrait les partitions qui
+seraient remplacees, ajoute les nouvelles partitions, puis refuse l'upload si
+la projection depasse la limite. Il ne supprime rien automatiquement en v1.
 
 - Nouveaux secrets R2:
 
