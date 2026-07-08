@@ -1158,7 +1158,7 @@ def archive_collect_to_r2(
     symbols: Optional[str] = typer.Option(None, "--symbols"),
     config: str = typer.Option("configs/live_sources.yaml", "--config"),
     max_priority: Optional[int] = typer.Option(None, "--max-priority"),
-    max_workers: int = typer.Option(4, "--max-workers"),
+    max_workers: int = typer.Option(1, "--max-workers"),
     submit_pause_seconds: float = typer.Option(0.25, "--submit-pause-seconds"),
     max_upload_mb: float = typer.Option(256.0, "--max-upload-mb"),
     emit_jsonl: bool = typer.Option(False, "--emit-jsonl/--no-jsonl"),

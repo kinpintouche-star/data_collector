@@ -42,6 +42,10 @@ python -m ict.cli archive collect-to-r2
   - upload vers R2;
   - produit un log JSONL et un resume GitHub.
 
+- Utiliser `max_workers=1` par defaut sur GitHub Actions. `dukascopy-node`
+  est plus fiable en serie qu'en parallele; on privilegie la stabilite au gain
+  de quelques minutes.
+
 - Faire evoluer la page React `Data`:
   - afficher la couverture locale;
   - afficher la couverture R2;

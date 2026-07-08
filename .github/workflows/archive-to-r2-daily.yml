@@ -20,7 +20,7 @@ on:
       max_workers:
         description: "Parallel assets"
         required: false
-        default: "4"
+        default: "1"
         type: string
       max_upload_mb:
         description: "Free-tier guard for encrypted upload size"
@@ -52,7 +52,7 @@ jobs:
       SYMBOLS: ${{ inputs.symbols }}
       SINCE: ${{ inputs.since }}
       UNTIL: ${{ inputs.until }}
-      MAX_WORKERS: ${{ inputs.max_workers || '4' }}
+      MAX_WORKERS: ${{ inputs.max_workers || '1' }}
       MAX_UPLOAD_MB: ${{ inputs.max_upload_mb || '256' }}
       DRY_RUN: ${{ inputs.dry_run || false }}
       LOG_PATH: collector-logs/archive-to-r2-daily.jsonl
