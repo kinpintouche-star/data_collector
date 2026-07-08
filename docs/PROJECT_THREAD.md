@@ -12,9 +12,10 @@ Le coeur du projet n'est pas seulement de lancer des backtests. Il faut pouvoir 
 
 ## Architecture Cible
 
-- Base locale Postgres: source principale et canonique pour les backtests, dashboards et archives longues.
-- Neon remote: entrepot/buffer de donnees live recentes, cible 30 jours dans un seul projet Free; les 180 jours M1 restent dans la base locale tant qu'une archive remote compressee n'est pas ajoutee.
-- Collecteurs: GitHub Actions pour alimenter Neon remote, puis Data Management local pour rapatrier Neon ou lancer Databento manuellement.
+- Base locale Postgres: source principale et canonique pour les backtests et dashboards.
+- R2 remote: archive durable cible pour les candles gratuites, stockees en Parquet/ZSTD puis chiffrees.
+- Neon remote: legacy/transition, utile comme fallback recent mais plus comme chemin principal.
+- Collecteurs: GitHub Actions doivent archiver directement les sources gratuites vers R2; Data Management local restaure R2 ou lance Databento manuellement.
 - Donnees canonisees: stockage idempotent par symbole, source, timeframe et `time_open`.
 - Interface principale cible: React/FastAPI pour le cockpit trading, la review des backtests, les dashboards analytiques de strategie et la gestion des donnees. Streamlit reste en parallele pour les pages admin/data pas encore migrees.
 - Orchestration locale cible: `docker compose` pour lancer Postgres, FastAPI, React/Vite et Adminer ensemble; `scripts/dev.ps1` et `Makefile` exposent les commandes courantes.
@@ -24,9 +25,9 @@ Le coeur du projet n'est pas seulement de lancer des backtests. Il faut pouvoir 
 
 Priorite actuelle:
 
-- Forex: Dukascopy pour historique gratuit M1; GitHub Actions utilise `dukascopy_node` pour pousser les actifs compatibles vers Neon.
+- Forex: Dukascopy pour historique gratuit M1; GitHub Actions utilise `dukascopy_node` pour archiver les actifs compatibles vers R2.
 - Crypto: Binance archives pour historique; Coinbase avec fallback Kraken pour live GitHub Actions.
-- Indices CFD: Dukascopy pour GER40/NAS100 vers Neon; Databento reste reserve au MNQ manuel.
+- Indices CFD: Dukascopy pour GER40/NAS100 vers R2; Databento reste reserve au MNQ manuel.
 - MNQ natif: Databento/CME/broker futures seulement. NAS100 peut servir de proxy de recherche, mais ne doit pas etre stocke comme MNQ canonique.
 - MT5: source locale utile si le terminal expose les symboles, mais pas fiable pour un collecteur cloud gratuit.
 - OANDA: retire du pipeline operationnel, car le parcours compte demande un depot.
@@ -45,10 +46,9 @@ Priorite actuelle:
 Court terme:
 
 - Finaliser une couverture live gratuite la plus large possible.
-- Utiliser GitHub Actions comme collecteur remote officiel vers Neon, avec workflow daily complet et priority free-safe.
-- Piloter les rattrapages depuis la page React `Data` via Neon par defaut, et Databento uniquement sur action manuelle.
-- Garder Neon comme buffer recent et synchroniser localement quand l'utilisateur le decide.
-- Ne pruner Neon que si le quota devient limite, et seulement avec verification que les candles anciennes existent deja en local.
+- Utiliser GitHub Actions comme collecteur remote officiel vers R2, sans passage obligatoire par Neon.
+- Piloter les rattrapages depuis la page React `Data` via R2 par defaut, Neon en fallback secondaire, et Databento uniquement sur action manuelle.
+- Garder Neon seulement comme transition/fallback recent, pas comme archive.
 - Utiliser le React Trading Lab pour inspecter les trades avec timeframes H4/H1/M30/M15/M5/M1, mode single chart par defaut, grille multi-timeframes optionnelle, fibo automatique limite aux timeframes pertinentes, events, entree/sortie, SL/TP et gaps.
 - Placer les elements de decision au bon endroit: OB/FVG/OTE comme zones temporelles, swings sur leurs candles de validation/structure, CRT et objectif comme niveaux dedies.
 - Lancer les backtests depuis React via Run Lab: strategie, periode, actif unique ou panier multi-actifs; chaque panier multi-actifs devient un groupe de runs comparable.

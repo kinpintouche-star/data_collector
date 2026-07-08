@@ -3,7 +3,9 @@ from __future__ import annotations
 import subprocess
 import sys
 import uuid
+import base64
 import json
+import secrets
 from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -14,6 +16,14 @@ import yaml
 from rich.console import Console
 from sqlalchemy import text
 
+from ict.archive.store import (
+    archive_configured,
+    archive_status as r2_archive_status,
+    collect_live_sources_to_r2,
+    export_remote_to_r2,
+    restore_from_r2,
+    verify_r2_archive,
+)
 from ict.backtest.grid import expand_grid
 from ict.backtest.runner import fallback_tick_size, run_dataset_backtest
 from ict.core.config import get_settings
@@ -49,6 +59,7 @@ datasets_app = typer.Typer(help="Dataset commands")
 metrics_app = typer.Typer(help="Metrics commands")
 universe_app = typer.Typer(help="Collection universe commands")
 live_app = typer.Typer(help="Live collector commands")
+archive_app = typer.Typer(help="Encrypted R2 archive commands")
 
 app.add_typer(db_app, name="db")
 app.add_typer(sources_app, name="sources")
@@ -57,6 +68,7 @@ app.add_typer(datasets_app, name="datasets")
 app.add_typer(metrics_app, name="metrics")
 app.add_typer(universe_app, name="universe")
 app.add_typer(live_app, name="live")
+app.add_typer(archive_app, name="archive")
 
 console = Console()
 
@@ -239,6 +251,25 @@ def _remote_database_url(value: str | None) -> str:
     if not env_value:
         raise typer.BadParameter("Use --remote-database-url or set LIVE_REMOTE_DATABASE_URL.")
     return env_value
+
+
+def _selected_archive_sources(
+    config: str,
+    symbols: str | None = None,
+    sources: str | None = None,
+):
+    symbol_set = {symbol.upper() for symbol in _csv_values(symbols)} if symbols else set()
+    source_set = set(_csv_values(sources)) if sources else set()
+    rows = []
+    for source in load_live_sources(config):
+        if not source.enabled or source.provider == "databento":
+            continue
+        if symbol_set and source.symbol_code.upper() not in symbol_set:
+            continue
+        if source_set and source.source_name not in source_set:
+            continue
+        rows.append(source)
+    return rows
 
 
 def _resolve_dataset(
@@ -1094,6 +1125,178 @@ def live_sync(
             config=config,
         )
     _print_json(result.as_dict())
+
+
+@archive_app.command("generate-key")
+def archive_generate_key() -> None:
+    """Generate a MARKET_ARCHIVE_KEY value without storing it."""
+
+    _print_json({"MARKET_ARCHIVE_KEY": base64.b64encode(secrets.token_bytes(32)).decode("ascii")})
+
+
+@archive_app.command("configured")
+def archive_configured_command() -> None:
+    settings = get_settings()
+    _print_json(
+        {
+            "configured": archive_configured(),
+            "r2_bucket": bool(settings.r2_bucket),
+            "r2_endpoint": bool(settings.r2_endpoint_url or settings.r2_account_id),
+            "r2_access_key_id": bool(settings.r2_access_key_id),
+            "r2_secret_access_key": bool(settings.r2_secret_access_key),
+            "market_archive_key": bool(settings.market_archive_key),
+            "prefix": settings.market_archive_prefix,
+            "cache_dir": settings.market_archive_cache_dir,
+        }
+    )
+
+
+@archive_app.command("collect-to-r2")
+def archive_collect_to_r2(
+    since: Optional[str] = typer.Option(None, "--since"),
+    until: Optional[str] = typer.Option(None, "--until"),
+    symbols: Optional[str] = typer.Option(None, "--symbols"),
+    config: str = typer.Option("configs/live_sources.yaml", "--config"),
+    max_priority: Optional[int] = typer.Option(None, "--max-priority"),
+    max_workers: int = typer.Option(4, "--max-workers"),
+    submit_pause_seconds: float = typer.Option(0.25, "--submit-pause-seconds"),
+    max_upload_mb: float = typer.Option(256.0, "--max-upload-mb"),
+    emit_jsonl: bool = typer.Option(False, "--emit-jsonl/--no-jsonl"),
+    log_path: Optional[str] = typer.Option(None, "--log-path"),
+    dry_run: bool = typer.Option(False, "--dry-run"),
+) -> None:
+    effective_log_path = log_path or ("collector-logs/archive-to-r2.jsonl" if emit_jsonl else None)
+    result = collect_live_sources_to_r2(
+        since=_parse_date(since) if since else None,
+        until=_parse_date(until) if until else None,
+        symbols=_csv_values(symbols) if symbols else None,
+        config=config,
+        max_priority=max_priority,
+        max_workers=max_workers,
+        submit_pause_seconds=submit_pause_seconds,
+        max_upload_mb=max_upload_mb,
+        dry_run=dry_run,
+        log_path=effective_log_path,
+    )
+    _print_json(result.as_dict())
+
+
+@archive_app.command("export-to-r2")
+def archive_export_to_r2(
+    remote_database_url: Optional[str] = typer.Option(None, "--remote-database-url"),
+    since: Optional[str] = typer.Option(None, "--since"),
+    until: Optional[str] = typer.Option(None, "--until"),
+    symbols: Optional[str] = typer.Option(None, "--symbols"),
+    sources: Optional[str] = typer.Option(None, "--sources"),
+    timeframe: str = typer.Option("M1", "--timeframe"),
+    limit: int = typer.Option(500000, "--limit"),
+    max_upload_mb: float = typer.Option(256.0, "--max-upload-mb"),
+) -> None:
+    """Legacy/transition helper: archive candles already present in Neon."""
+
+    result = export_remote_to_r2(
+        _remote_database_url(remote_database_url),
+        since=_parse_date(since) if since else None,
+        until=_parse_date(until) if until else None,
+        symbols=_csv_values(symbols) if symbols else None,
+        source_names=_csv_values(sources) if sources else None,
+        timeframe=timeframe.upper(),
+        limit=limit,
+        max_upload_mb=max_upload_mb,
+    )
+    _print_json(result.as_dict())
+
+
+@archive_app.command("restore-from-r2")
+def archive_restore_from_r2(
+    since: Optional[str] = typer.Option(None, "--since"),
+    until: Optional[str] = typer.Option(None, "--until"),
+    days: int = typer.Option(7, "--days"),
+    symbols: Optional[str] = typer.Option(None, "--symbols"),
+    sources: Optional[str] = typer.Option(None, "--sources"),
+    timeframe: str = typer.Option("M1", "--timeframe"),
+    config: str = typer.Option("configs/live_sources.yaml", "--config"),
+    max_download_mb: float = typer.Option(1024.0, "--max-download-mb"),
+    continue_on_missing: bool = typer.Option(True, "--continue-on-missing/--fail-on-missing"),
+) -> None:
+    if since or until:
+        if not (since and until):
+            raise typer.BadParameter("Use both --since and --until, or neither.")
+        start = _parse_date(since)
+        end = _parse_date(until)
+    else:
+        end = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        start = end - timedelta(days=days)
+
+    results = []
+    for source in _selected_archive_sources(config, symbols=symbols, sources=sources):
+        result = restore_from_r2(
+            since=start,
+            until=end,
+            symbols=[source.symbol_code],
+            source_names=[source.source_name],
+            timeframe=timeframe.upper(),
+            continue_on_missing=continue_on_missing,
+            max_download_mb=max_download_mb,
+        )
+        results.append({"symbol_code": source.symbol_code, "source_name": source.source_name, **result.as_dict()})
+    _print_json({"status": "completed", "since": start, "until": end, "assets": len(results), "results": results})
+
+
+@archive_app.command("status")
+def archive_status_command(
+    symbols: Optional[str] = typer.Option(None, "--symbols"),
+    sources: Optional[str] = typer.Option(None, "--sources"),
+    timeframe: str = typer.Option("M1", "--timeframe"),
+    config: str = typer.Option("configs/live_sources.yaml", "--config"),
+    lookback_days: int = typer.Option(220, "--lookback-days"),
+) -> None:
+    selected = _selected_archive_sources(config, symbols=symbols, sources=sources)
+    statuses = []
+    for source in selected:
+        rows = r2_archive_status(
+            symbols=[source.symbol_code],
+            source_names=[source.source_name],
+            timeframe=timeframe.upper(),
+            lookback_days=lookback_days,
+        )
+        statuses.append(
+            {
+                "symbol_code": source.symbol_code,
+                "source_name": source.source_name,
+                **rows.get((source.symbol_code.upper(), source.source_name), {}),
+            }
+        )
+    _print_json({"configured": archive_configured(), "assets": len(statuses), "rows": statuses})
+
+
+@archive_app.command("verify")
+def archive_verify_command(
+    since: str = typer.Option(..., "--since"),
+    until: str = typer.Option(..., "--until"),
+    symbols: Optional[str] = typer.Option(None, "--symbols"),
+    sources: Optional[str] = typer.Option(None, "--sources"),
+    timeframe: str = typer.Option("M1", "--timeframe"),
+    config: str = typer.Option("configs/live_sources.yaml", "--config"),
+) -> None:
+    start = _parse_date(since)
+    end = _parse_date(until)
+    results = []
+    for source in _selected_archive_sources(config, symbols=symbols, sources=sources):
+        results.append(
+            {
+                "symbol_code": source.symbol_code,
+                "source_name": source.source_name,
+                **verify_r2_archive(
+                    symbols=[source.symbol_code],
+                    source_names=[source.source_name],
+                    since=start,
+                    until=end,
+                    timeframe=timeframe.upper(),
+                ),
+            }
+        )
+    _print_json({"since": start, "until": end, "assets": len(results), "results": results})
 
 
 @live_app.command("storage")

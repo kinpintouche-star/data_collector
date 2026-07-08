@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { CloudDownload, Database, RefreshCcw, Search, Square, SquareCheckBig } from "lucide-react";
+import { ArchiveRestore, CloudDownload, Database, RefreshCcw, Search, Square, SquareCheckBig } from "lucide-react";
 import { getDataApiUsage, getDataCoverage, getDataFetchJob, launchDataFetch } from "../api";
 import type { DataApiUsagePayload, DataCoveragePayload, DataCoverageRow, DataFetchChannel, DataFetchJob } from "../types";
 
 const channelLabels: Record<DataFetchChannel, string> = {
   auto: "Auto",
+  r2: "R2",
   neon: "Neon",
   databento: "Databento"
 };
@@ -49,6 +50,9 @@ function channelIsApplicable(row: DataCoverageRow, channel: DataFetchChannel): b
   if (channel === "neon") {
     return row.source_type !== "databento";
   }
+  if (channel === "r2") {
+    return row.source_type !== "databento";
+  }
   if (channel === "databento") {
     return row.source_type === "databento";
   }
@@ -64,6 +68,9 @@ function configMissing(rows: DataCoverageRow[], channel: DataFetchChannel, setti
       ? new Set(rows.map((row) => row.recommended_channel.toLowerCase()))
       : new Set([channel]);
   if (channels.has("neon") && !settings.neon_configured) {
+    return true;
+  }
+  if (channels.has("r2") && !settings.r2_configured) {
     return true;
   }
   if (channels.has("databento") && !settings.databento_configured) {
@@ -265,6 +272,7 @@ export function DataManagement() {
           <span>Canal</span>
           <select value={channelFilter} onChange={(event) => setChannelFilter(event.target.value)}>
             <option value="all">Tous</option>
+            <option value="R2">R2</option>
             <option value="Neon">Neon</option>
             <option value="Databento">Databento</option>
           </select>
@@ -302,10 +310,15 @@ export function DataManagement() {
           <span>Clear</span>
         </button>
         <button className="icon-button" onClick={() => selectChannel("Neon")} type="button">Neon only</button>
+        <button className="icon-button" onClick={() => selectChannel("R2")} type="button">R2 only</button>
         <button className="icon-button" onClick={() => selectChannel("Databento")} type="button">Databento only</button>
-        <button className="primary-inline" disabled={actionDisabled("neon")} onClick={() => void runFetch("neon")} type="button">
+        <button className="primary-inline" disabled={actionDisabled("r2")} onClick={() => void runFetch("r2")} type="button">
+          <ArchiveRestore size={17} />
+          <span>Restore R2</span>
+        </button>
+        <button className="icon-button" disabled={actionDisabled("neon")} onClick={() => void runFetch("neon")} type="button">
           <CloudDownload size={17} />
-          <span>Fetch Neon</span>
+          <span>Fetch Neon recent</span>
         </button>
         <button className="icon-button" disabled={actionDisabled("databento")} onClick={() => void runFetch("databento")} type="button">Fetch Databento</button>
       </section>
@@ -331,6 +344,7 @@ export function DataManagement() {
 
       <div className="data-config-line">
         <Database size={16} />
+        <span>R2: {coverage?.settings.r2_configured ? "configuré" : "non configuré"}</span>
         <span>Neon: {coverage?.settings.neon_configured ? "configuré" : "non configuré"}</span>
         <span>Databento: {coverage?.settings.databento_configured ? "configuré" : "non configuré"}</span>
         <span>Sélection: {selectedRows.length}</span>
@@ -370,6 +384,7 @@ export function DataManagement() {
               <th>Canal</th>
               <th>Statut</th>
               <th>Local last</th>
+              <th>R2 last</th>
               <th>Neon last</th>
               <th>Rows</th>
               <th>Flags</th>
@@ -396,12 +411,16 @@ export function DataManagement() {
                   <td>{row.recommended_channel}</td>
                   <td><span className={`freshness ${row.freshness_status}`}>{statusLabel(row)}</span></td>
                   <td>{formatDate(row.local_last)}</td>
+                  <td>
+                    {formatDate(row.r2_last)}
+                    <small>{row.r2_available ? `${formatNumber(row.r2_partitions)} parts` : "-"}</small>
+                  </td>
                   <td>{formatDate(row.neon_last)}</td>
                   <td>{formatNumber(row.candle_rows)}</td>
                   <td>{formatNumber(row.flagged_candles)}</td>
                   <td>
                     <div className="row-actions">
-                      {(["neon", "databento"] as DataFetchChannel[]).map((channel) => (
+                      {(["r2", "neon", "databento"] as DataFetchChannel[]).map((channel) => (
                         <button
                           disabled={!channelIsApplicable(row, channel) || configMissing([row], channel, coverage?.settings ?? null)}
                           key={channel}
@@ -418,7 +437,7 @@ export function DataManagement() {
             })}
             {!filteredRows.length && (
               <tr>
-                <td colSpan={10}>
+                <td colSpan={11}>
                   <div className="empty-state">Aucun actif ne correspond aux filtres.</div>
                 </td>
               </tr>

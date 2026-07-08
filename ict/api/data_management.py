@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import Engine, text
 
 from ict.api.review import ReviewNotFoundError, _json_value, _sanitize_mapping
+from ict.archive.store import archive_configured, archive_status, restore_from_r2
 from ict.core.config import get_settings
 from ict.data.ingest import ingest_market_data
 from ict.db.session import build_engine
@@ -21,7 +22,7 @@ from ict.live.sync import sync_remote_candles
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_UNIVERSE_PATH = PROJECT_ROOT / "configs" / "universe_default_40.yaml"
 
-DataFetchChannel = Literal["auto", "neon", "databento"]
+DataFetchChannel = Literal["auto", "r2", "neon", "databento"]
 
 
 class DataFetchAsset(BaseModel):
@@ -165,6 +166,7 @@ def build_data_coverage_rows(engine: Engine | None = None, now: datetime | None 
     coverage = _read_local_coverage_frame(engine, targets)
     sources = _read_optional_frame(engine, "SELECT name AS source_name, source_type, config FROM data_sources ORDER BY name")
     live = _read_optional_frame(engine, "SELECT * FROM mart_live_collector ORDER BY symbol_code, source_name")
+    r2_status = _r2_status_for_targets(targets)
 
     base = targets.rename(columns={"source_name": "local_source"}).copy()
     if not coverage.empty:
@@ -204,7 +206,11 @@ def build_data_coverage_rows(engine: Engine | None = None, now: datetime | None 
         )
         base = base.merge(live_rollup, on="symbol_code", how="left")
 
-    return [_coverage_row_payload(row, now=now) for row in base.to_dict(orient="records")]
+    rows = []
+    for row in base.to_dict(orient="records"):
+        row.update(r2_status.get((str(row.get("symbol_code")).upper(), str(row.get("local_source"))), {}))
+        rows.append(_coverage_row_payload(row, now=now))
+    return rows
 
 
 def build_data_usage_rows(engine: Engine | None = None) -> list[dict[str, Any]]:
@@ -303,11 +309,11 @@ def _read_local_coverage_frame(engine: Engine, targets: pd.DataFrame) -> pd.Data
 
 def resolve_channel(row: dict[str, Any], requested: DataFetchChannel) -> str:
     if requested != "auto":
-        return requested.capitalize()
+        return "R2" if requested == "r2" else requested.capitalize()
     source_type = str(row.get("source_type") or "").lower()
     if source_type == "databento":
         return "Databento"
-    return "Neon"
+    return "R2"
 
 
 def fetch_missing_for_row(row: dict[str, Any], request: DataFetchJobRequest, now: datetime | None = None) -> dict[str, Any]:
@@ -336,6 +342,38 @@ def fetch_missing_for_row(row: dict[str, Any], request: DataFetchJobRequest, now
             "rows_updated": result["rows_updated"],
             "rows_skipped": result["rows_skipped"],
             "rows_written": result["rows_written"],
+        }
+
+    if channel == "R2":
+        if not archive_configured():
+            raise RuntimeError("R2 archive is not configured.")
+        end = latest_complete_utc_day(now)
+        result = restore_from_r2(
+            since=missing_start(row, request.fallback_days, request.overlap_minutes, now),
+            until=end,
+            symbols=[str(row["symbol_code"])],
+            source_names=[str(row["source_name"])],
+            timeframe="M1",
+            continue_on_missing=True,
+        )
+        if result.rows_read == 0:
+            return {
+                **_skipped(row, channel, "no_r2_data"),
+                "rows_read": 0,
+                "until": _iso(end),
+                "missing_partitions": len(result.missing),
+            }
+        return {
+            "symbol_code": row["symbol_code"],
+            "source_name": row["source_name"],
+            "channel": channel,
+            "status": "completed",
+            "rows_read": result.rows_read,
+            "rows_inserted": result.rows_inserted,
+            "rows_updated": result.rows_updated,
+            "rows_written": result.rows_written,
+            "partitions": len(result.partitions),
+            "missing_partitions": len(result.missing),
         }
 
     remote_url = get_settings().live_remote_database_url
@@ -389,6 +427,7 @@ def latest_complete_utc_day(now: datetime | None = None) -> datetime:
 def _data_settings_payload() -> dict[str, bool]:
     settings = get_settings()
     return {
+        "r2_configured": archive_configured(),
         "neon_configured": bool(settings.live_remote_database_url),
         "databento_configured": bool(settings.databento_api_key),
     }
@@ -419,6 +458,11 @@ def _coverage_row_payload(row: dict[str, Any], now: datetime | None = None) -> d
         "last_ingested_at": _iso(row.get("last_ingested_at")),
         "local_last": _iso(local_last),
         "neon_last": _iso(neon_last),
+        "r2_available": bool(row.get("r2_available") or False),
+        "r2_last": row.get("r2_last"),
+        "r2_partitions": int(row.get("r2_partitions") or 0),
+        "r2_rows": int(row.get("r2_rows") or 0),
+        "r2_encrypted_bytes": int(row.get("r2_encrypted_bytes") or 0),
         "neon_enabled": bool(row.get("neon_enabled") or False),
         "neon_status": row.get("neon_status"),
         "neon_sources": row.get("neon_sources"),
@@ -467,10 +511,16 @@ def _coverage_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
 def _api_usage_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     info = {
+        "R2": {
+            "usage": "Archive gratuite cible: GitHub Actions stocke les candles canonisees en Parquet/ZSTD chiffre.",
+            "limits": "Borne par le free tier R2, les limites GitHub Actions, et les garde-fous max upload/download.",
+            "current_split": "Restore par partitions journalieres utiles, puis backtest depuis la base locale.",
+            "cost": "Free tier target; aucune source payante schedulee.",
+        },
         "Neon": {
-            "usage": "Remote warehouse fed daily by free GitHub Actions providers, then local canonical DB sync.",
-            "limits": "Bound by Neon free storage/compute, GitHub Actions minutes, and the configured row limit.",
-            "current_split": "Pulls missing candles per selected asset with overlap. This is the default for every non-Databento asset.",
+            "usage": "Fallback/transition SQL recent, plus source principale.",
+            "limits": "Bound by Neon free storage/compute and row limit.",
+            "current_split": "Pull missing recent candles if R2 is not available yet.",
             "cost": "Free tier target.",
         },
         "Databento": {
@@ -507,7 +557,24 @@ def _channel_is_applicable(row: dict[str, Any], channel: str) -> bool:
         return source_type == "databento"
     if channel == "Neon":
         return source_type != "databento"
+    if channel == "R2":
+        return source_type != "databento"
     return False
+
+
+def _r2_status_for_targets(targets: pd.DataFrame) -> dict[tuple[str, str], dict[str, Any]]:
+    if targets.empty or not archive_configured():
+        return {}
+    output: dict[tuple[str, str], dict[str, Any]] = {}
+    for row in targets.to_dict(orient="records"):
+        symbol_code = str(row["symbol_code"]).upper()
+        source_name = str(row["source_name"])
+        try:
+            status = archive_status(symbols=[symbol_code], source_names=[source_name], timeframe="M1")
+            output.update(status)
+        except Exception:
+            output[(symbol_code, source_name)] = {"r2_available": False, "r2_error": "status_unavailable"}
+    return output
 
 
 def _mark_data_job_asset(job_id: str, result: dict[str, Any] | None = None, error: dict[str, Any] | None = None) -> None:

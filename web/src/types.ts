@@ -295,7 +295,7 @@ export type BacktestJob = {
   errors: Array<Record<string, unknown>>;
 };
 
-export type DataFetchChannel = "auto" | "neon" | "databento";
+export type DataFetchChannel = "auto" | "r2" | "neon" | "databento";
 
 export type DataCoverageRow = {
   symbol_code: string;
@@ -303,13 +303,18 @@ export type DataCoverageRow = {
   source_name: string;
   source_type: string | null;
   asset_type: string | null;
-  recommended_channel: "Neon" | "Databento";
+  recommended_channel: "R2" | "Neon" | "Databento";
   candle_rows: number;
   first_candle_time: string | null;
   last_candle_time: string | null;
   last_ingested_at: string | null;
   local_last: string | null;
   neon_last: string | null;
+  r2_available: boolean;
+  r2_last: string | null;
+  r2_partitions: number;
+  r2_rows: number;
+  r2_encrypted_bytes: number;
   neon_enabled: boolean;
   neon_status: string | null;
   neon_sources: string | null;
@@ -325,6 +330,7 @@ export type DataCoverageRow = {
 export type DataCoveragePayload = {
   generated_at: string;
   settings: {
+    r2_configured: boolean;
     neon_configured: boolean;
     databento_configured: boolean;
   };

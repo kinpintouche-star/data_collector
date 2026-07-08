@@ -27,6 +27,14 @@ if BaseSettings is not None:
         mt5_server: Optional[str] = Field(default=None, alias="MT5_SERVER")  # type: ignore[misc]
         databento_api_key: Optional[str] = Field(default=None, alias="DATABENTO_API_KEY")  # type: ignore[misc]
         live_remote_database_url: Optional[str] = Field(default=None, alias="LIVE_REMOTE_DATABASE_URL")  # type: ignore[misc]
+        market_archive_key: Optional[str] = Field(default=None, alias="MARKET_ARCHIVE_KEY")  # type: ignore[misc]
+        market_archive_cache_dir: str = Field(default=".cache/market_archive", alias="MARKET_ARCHIVE_CACHE_DIR")  # type: ignore[misc]
+        market_archive_prefix: str = Field(default="market-candles", alias="MARKET_ARCHIVE_PREFIX")  # type: ignore[misc]
+        r2_account_id: Optional[str] = Field(default=None, alias="R2_ACCOUNT_ID")  # type: ignore[misc]
+        r2_access_key_id: Optional[str] = Field(default=None, alias="R2_ACCESS_KEY_ID")  # type: ignore[misc]
+        r2_secret_access_key: Optional[str] = Field(default=None, alias="R2_SECRET_ACCESS_KEY")  # type: ignore[misc]
+        r2_bucket: Optional[str] = Field(default=None, alias="R2_BUCKET")  # type: ignore[misc]
+        r2_endpoint_url: Optional[str] = Field(default=None, alias="R2_ENDPOINT_URL")  # type: ignore[misc]
         oanda_api_token: Optional[str] = Field(default=None, alias="OANDA_API_TOKEN")  # type: ignore[misc]
         oanda_account_id: Optional[str] = Field(default=None, alias="OANDA_ACCOUNT_ID")  # type: ignore[misc]
         oanda_env: str = Field(default="practice", alias="OANDA_ENV")  # type: ignore[misc]
@@ -45,6 +53,14 @@ else:
         mt5_server: Optional[str] = os.getenv("MT5_SERVER")
         databento_api_key: Optional[str] = os.getenv("DATABENTO_API_KEY")
         live_remote_database_url: Optional[str] = os.getenv("LIVE_REMOTE_DATABASE_URL")
+        market_archive_key: Optional[str] = os.getenv("MARKET_ARCHIVE_KEY")
+        market_archive_cache_dir: str = os.getenv("MARKET_ARCHIVE_CACHE_DIR", ".cache/market_archive")
+        market_archive_prefix: str = os.getenv("MARKET_ARCHIVE_PREFIX", "market-candles")
+        r2_account_id: Optional[str] = os.getenv("R2_ACCOUNT_ID")
+        r2_access_key_id: Optional[str] = os.getenv("R2_ACCESS_KEY_ID")
+        r2_secret_access_key: Optional[str] = os.getenv("R2_SECRET_ACCESS_KEY")
+        r2_bucket: Optional[str] = os.getenv("R2_BUCKET")
+        r2_endpoint_url: Optional[str] = os.getenv("R2_ENDPOINT_URL")
         oanda_api_token: Optional[str] = os.getenv("OANDA_API_TOKEN")
         oanda_account_id: Optional[str] = os.getenv("OANDA_ACCOUNT_ID")
         oanda_env: str = os.getenv("OANDA_ENV", "practice")

@@ -25,9 +25,21 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-ict}:${POSTGRES_PASSWORD:-ict}@postgres:5432/${POSTGRES_DB:-ict}
+      LIVE_REMOTE_DATABASE_URL: ${LIVE_REMOTE_DATABASE_URL:-}
+      MARKET_ARCHIVE_KEY: ${MARKET_ARCHIVE_KEY:-}
+      MARKET_ARCHIVE_CACHE_DIR: ${MARKET_ARCHIVE_CACHE_DIR:-.cache/market_archive}
+      MARKET_ARCHIVE_PREFIX: ${MARKET_ARCHIVE_PREFIX:-market-candles}
+      MARKET_ARCHIVE_STARTUP_RESTORE_ENABLED: ${MARKET_ARCHIVE_STARTUP_RESTORE_ENABLED:-true}
+      MARKET_ARCHIVE_STARTUP_DAYS: ${MARKET_ARCHIVE_STARTUP_DAYS:-7}
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      R2_BUCKET: ${R2_BUCKET:-}
+      R2_ENDPOINT_URL: ${R2_ENDPOINT_URL:-}
     command: >
       sh -c "python -m alembic upgrade head
       && python -m ict.cli db seed-defaults
+      && if [ \"$$MARKET_ARCHIVE_STARTUP_RESTORE_ENABLED\" = \"true\" ]; then python -m ict.cli archive restore-from-r2 --days \"$$MARKET_ARCHIVE_STARTUP_DAYS\" --continue-on-missing || echo 'Archive startup restore skipped.'; else echo 'Archive startup restore disabled.'; fi
       && python -m uvicorn ict.api.app:app --host 0.0.0.0 --port 8000 --reload"
     ports:
       - "8000:8000"

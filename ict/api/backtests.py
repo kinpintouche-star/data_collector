@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from ict.api.analytics import build_analytics_payload
 from ict.api.review import ReviewNotFoundError, _sanitize_mapping
+from ict.archive.store import archive_configured, restore_from_r2
 from ict.backtest.runner import run_dataset_backtest, run_dataset_strategy_definition_backtest
 from ict.data.datasets import create_dataset_in_session
 from ict.db.repositories import DatasetRepository, StrategyDefinitionRepository, json_safe
@@ -140,6 +141,7 @@ def run_backtest_job(job_id: str) -> None:
 
     for asset in request.assets:
         try:
+            archive_restore = _try_restore_archive_for_asset(asset, request.timeframe, start, end)
             with session_scope() as session:
                 dataset_payload = create_dataset_in_session(
                     session,
@@ -161,6 +163,7 @@ def run_backtest_job(job_id: str) -> None:
                             **launch_metadata,
                             "symbol_code": asset.symbol_code,
                             "source_name": asset.source_name,
+                            "archive_restore": archive_restore,
                         },
                     )
                 else:
@@ -175,6 +178,7 @@ def run_backtest_job(job_id: str) -> None:
                             **launch_metadata,
                             "symbol_code": asset.symbol_code,
                             "source_name": asset.source_name,
+                            "archive_restore": archive_restore,
                         },
                     )
                 result = {
@@ -318,6 +322,66 @@ def _list_asset_options(engine: Engine) -> list[dict[str, Any]]:
     with engine.connect() as connection:
         rows = connection.execute(query).mappings().all()
     return [_sanitize_mapping(row) for row in rows]
+
+
+def _try_restore_archive_for_asset(
+    asset: BacktestAssetRequest,
+    timeframe: str,
+    start: datetime,
+    end: datetime,
+) -> dict[str, Any] | None:
+    if timeframe.upper() != "M1" or not archive_configured():
+        return None
+    try:
+        if _local_covers_window(asset.symbol_code, asset.source_name, timeframe, start, end):
+            return {"status": "skipped", "reason": "local_already_covers_window"}
+        result = restore_from_r2(
+            since=start,
+            until=end,
+            symbols=[asset.symbol_code],
+            source_names=[asset.source_name],
+            timeframe=timeframe.upper(),
+            continue_on_missing=True,
+        )
+        return result.as_dict()
+    except Exception as exc:  # noqa: BLE001 - backtest gap handling remains the source of truth
+        return {"status": "failed", "error": str(exc)}
+
+
+def _local_covers_window(
+    symbol_code: str,
+    source_name: str,
+    timeframe: str,
+    start: datetime,
+    end: datetime,
+) -> bool:
+    query = text(
+        """
+        SELECT MIN(mc.time_open) AS first_time, MAX(mc.time_open) AS last_time
+        FROM market_candles mc
+        JOIN symbols s ON s.id = mc.symbol_id
+        JOIN data_sources ds ON ds.id = mc.source_id
+        WHERE s.symbol_code = :symbol_code
+            AND ds.name = :source_name
+            AND mc.timeframe = :timeframe
+            AND mc.time_open >= :start
+            AND mc.time_open <= :end
+        """
+    )
+    with build_engine().connect() as connection:
+        row = connection.execute(
+            query,
+            {
+                "symbol_code": symbol_code,
+                "source_name": source_name,
+                "timeframe": timeframe.upper(),
+                "start": start,
+                "end": end,
+            },
+        ).mappings().one()
+    first_time = row["first_time"]
+    last_time = row["last_time"]
+    return bool(first_time and last_time and first_time <= start and last_time >= end - pd.Timedelta(minutes=1))
 
 
 def _list_strategy_configs() -> list[dict[str, str]]:

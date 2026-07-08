@@ -1,16 +1,21 @@
-# Live Collector
+# Live Collector / Archive Remote
 
-Le collecteur live officiel utilise maintenant **GitHub Actions -> Neon**. Il maintient un entrepot remote compact de candles M1, puis l'app locale peut rapatrier les donnees dans la base canonique du PC via la page `Data` ou `ict live sync --from-remote`.
+Le chemin cible des donnees gratuites devient **GitHub Actions -> R2 archive chiffree**. Neon reste disponible en transition/fallback recent, mais il n'est plus l'objectif principal du pipeline.
+
+Guide de reference actuel:
+
+- [R2_ARCHIVE_GUIDE.md](R2_ARCHIVE_GUIDE.md)
 
 ## Architecture
 
 - GitHub Actions est le runtime remote officiel v1.
-- Neon Postgres stocke les candles compactes recentes dans `live_market_candles`, plus `collector_runs`, `collector_source_state` et `collector_incidents`.
+- R2 doit stocker les candles gratuites sous forme Parquet/ZSTD puis chiffrees.
+- Neon Postgres devient legacy/transition pour les candles compactes recentes dans `live_market_candles`.
 - La base locale Postgres reste la source canonique pour les backtests, dashboards et archives longues.
 - Cloudflare Worker, Oracle VM et Docker remote collector sont legacy: ils ne sont plus le chemin operationnel.
-- R2/object storage est reporte; v1 reste en Neon compact SQL uniquement.
+- R2/object storage devient la cible v1 pour l'archive gratuite.
 
-Ce n'est pas un stream broker-grade. C'est un batch idempotent: chaque run recupere une fenetre de candles completes, applique un overlap, puis upsert par `(source_state_id, time_open)`.
+Ce n'est pas un stream broker-grade. C'est un batch idempotent: chaque run recupere une fenetre de candles completes, cree des partitions journalieres verifiees, puis les upload dans R2.
 
 ## Workflows GitHub Actions
 

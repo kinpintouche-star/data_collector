@@ -1,0 +1,151 @@
+name: Archive Free Candles To R2
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      symbols:
+        description: "Optional comma-separated symbols, e.g. BTCUSD,EURUSD"
+        required: false
+        type: string
+      since:
+        description: "Optional UTC start, e.g. 2026-07-06T00:00:00+00:00"
+        required: false
+        type: string
+      until:
+        description: "Optional UTC end, e.g. 2026-07-07T00:00:00+00:00"
+        required: false
+        type: string
+      max_workers:
+        description: "Parallel assets"
+        required: false
+        default: "4"
+        type: string
+      max_upload_mb:
+        description: "Free-tier guard for encrypted upload size"
+        required: false
+        default: "256"
+        type: string
+      dry_run:
+        description: "Validate selection without touching providers/R2"
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: archive-to-r2-daily
+  cancel-in-progress: false
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      R2_ENDPOINT_URL: ${{ secrets.R2_ENDPOINT_URL }}
+      MARKET_ARCHIVE_KEY: ${{ secrets.MARKET_ARCHIVE_KEY }}
+      MARKET_ARCHIVE_PREFIX: ${{ vars.MARKET_ARCHIVE_PREFIX || 'market-candles' }}
+      SYMBOLS: ${{ inputs.symbols }}
+      SINCE: ${{ inputs.since }}
+      UNTIL: ${{ inputs.until }}
+      MAX_WORKERS: ${{ inputs.max_workers || '4' }}
+      MAX_UPLOAD_MB: ${{ inputs.max_upload_mb || '256' }}
+      DRY_RUN: ${{ inputs.dry_run || false }}
+      LOG_PATH: collector-logs/archive-to-r2-daily.jsonl
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install project
+        run: python -m pip install -e .
+
+      - name: Archive free candles directly to R2
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$(dirname "$LOG_PATH")"
+          if [ "${DRY_RUN}" != "true" ]; then
+            missing=0
+            for name in R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET MARKET_ARCHIVE_KEY; do
+              if [ -z "${!name:-}" ]; then
+                echo "$name secret is missing; skipping archive run."
+                missing=1
+              fi
+            done
+            if [ -z "${R2_ENDPOINT_URL:-}" ] && [ -z "${R2_ACCOUNT_ID:-}" ]; then
+              echo "Set R2_ENDPOINT_URL or R2_ACCOUNT_ID; skipping archive run."
+              missing=1
+            fi
+            if [ "$missing" = "1" ]; then
+              echo "## Archive To R2 skipped" >> "$GITHUB_STEP_SUMMARY"
+              echo "R2 secrets are not fully configured." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+          fi
+
+          echo "::group::Archive run"
+          args=(archive collect-to-r2 --max-workers "$MAX_WORKERS" --max-upload-mb "$MAX_UPLOAD_MB" --emit-jsonl --log-path "$LOG_PATH")
+          if [ "${DRY_RUN}" = "true" ]; then
+            args+=(--dry-run)
+          fi
+          if [ -n "${SYMBOLS:-}" ]; then
+            args+=(--symbols "$SYMBOLS")
+          fi
+          if [ -n "${SINCE:-}" ] || [ -n "${UNTIL:-}" ]; then
+            if [ -z "${SINCE:-}" ] || [ -z "${UNTIL:-}" ]; then
+              echo "Use both since and until, or neither." >&2
+              exit 2
+            fi
+            args+=(--since "$SINCE" --until "$UNTIL")
+          fi
+          python -m ict.cli "${args[@]}"
+          echo "::endgroup::"
+
+      - name: Write archive summary
+        if: always()
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          log_path = Path(os.environ.get("LOG_PATH", "collector-logs/archive-to-r2-daily.jsonl"))
+          summary_path = Path(os.environ["GITHUB_STEP_SUMMARY"])
+          events = []
+          if log_path.exists():
+              events = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+          completed = next((event for event in reversed(events) if event["event"] == "archive_run_completed"), None)
+          with summary_path.open("a", encoding="utf-8") as handle:
+              handle.write("# Archive Free Candles To R2\\n\\n")
+              handle.write(f"- Dry run: `{os.environ.get('DRY_RUN')}`\\n")
+              handle.write(f"- Symbols input: `{os.environ.get('SYMBOLS') or 'all enabled free'}`\\n")
+              if completed:
+                  for key in ["status", "assets_requested", "assets_succeeded", "assets_failed", "rows_fetched", "partitions_written", "encrypted_bytes", "since", "until"]:
+                      if key in completed:
+                          handle.write(f"- {key}: `{completed[key]}`\\n")
+              else:
+                  handle.write("- No archive summary event was written. Check logs.\\n")
+          PY
+
+      - name: Upload archive logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: archive-to-r2-daily-logs
+          path: collector-logs/
+          if-no-files-found: ignore

@@ -32,8 +32,17 @@ if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
 }
 
 $envValues = Read-DotEnv -Path $EnvFile
-$requiredSecrets = @("LIVE_REMOTE_DATABASE_URL")
-$optionalSecrets = @("DATABENTO_API_KEY")
+$requiredSecrets = @()
+$optionalSecrets = @(
+    "LIVE_REMOTE_DATABASE_URL",
+    "DATABENTO_API_KEY",
+    "R2_ACCOUNT_ID",
+    "R2_ACCESS_KEY_ID",
+    "R2_SECRET_ACCESS_KEY",
+    "R2_BUCKET",
+    "R2_ENDPOINT_URL",
+    "MARKET_ARCHIVE_KEY"
+)
 
 foreach ($name in $requiredSecrets) {
     if (-not $envValues.ContainsKey($name) -or -not $envValues[$name]) {

@@ -6,7 +6,7 @@ Derniere mise a jour: 2026-07-08
 
 Priorite de reference: le projet principal est de creer un environnement fiable pour tester des strategies en backtest.
 
-Le projet a une base locale canonique, une base Neon remote pour le live/warehouse, un dashboard Streamlit, une interface React/FastAPI principale, des providers historiques, un collecteur live Python/GitHub Actions officiel, et une protection backtest contre les trous de candles.
+Le projet a une base locale canonique, une interface React/FastAPI principale, des providers historiques, un collecteur GitHub Actions, et une protection backtest contre les trous de candles. La vision data remote change maintenant: R2 devient l'archive officielle gratuite cible; Neon passe en transition/fallback recent.
 
 Le point ouvert principal est la couverture live/gratuite des actifs non-crypto au-dela de Dukascopy. Les cryptos fonctionnent deja en live/batch via sources publiques. OANDA est retire du pipeline operationnel car le parcours compte demande un depot.
 
@@ -22,7 +22,9 @@ Nouveau jalon Run Lab: l'app React/FastAPI permet de preparer un backtest depuis
 
 Nouveau jalon orchestration locale: lancement simplifie via Docker Compose avec services `postgres`, `api`, `web` et `adminer`, plus `Makefile` et `scripts/dev.ps1` pour demarrer, voir les logs et afficher les URLs utiles. Le collecteur live n'est pas dans ce compose local, car il doit continuer de tourner quand le PC est eteint.
 
-Nouveau jalon collecteur remote GitHub Actions: Oracle/VM Docker/Cloudflare sont passes en legacy. Le chemin officiel est maintenant GitHub Actions -> Neon, avec workflow daily complet, workflow priority free-safe, logs JSONL, resume GitHub Actions et metadata GitHub dans `collector_runs`.
+Nouveau jalon data remote: Oracle/VM Docker/Cloudflare restent legacy. Le chemin cible devient GitHub Actions -> R2 archive chiffree pour les sources gratuites. Neon n'est plus le chemin principal; il reste seulement transition/fallback recent tant que la migration R2 n'est pas terminee.
+
+Nouveau guide: `docs/R2_ARCHIVE_GUIDE.md` fixe l'objectif actuel, ce qui doit etre modifie et ce qui est nouveau.
 
 Nouveau jalon documentation architecture: ajout d'un schema diagrams.net versionne dans `docs/ARCHITECTURE_CURRENT.drawio` et d'une note `docs/ARCHITECTURE.md`. Le schema decrit les containers, ports, roles, flux locaux, flux Neon/GitHub Actions/providers, et doit etre mis a jour quand l'architecture change.
 
@@ -48,7 +50,7 @@ Audit local 180 jours:
 - MNQ: OK via Databento sur la fenetre chargee, mais ce n'est pas une source gratuite permanente.
 - XAUUSD, XAGUSD, SPX500, US30, UK100, FRA40, EU50, JPN225: configures mais pas encore remplis localement.
 
-## Live Collector
+## Live Collector / Archive Remote
 
 En place:
 
@@ -56,18 +58,18 @@ En place:
 - Sync Neon -> local depuis l'interface.
 - Sync remote -> local via CLI.
 - Sync local -> remote pour seed/retention.
-- GitHub Actions daily officiel pour alimenter Neon.
-- GitHub Actions priority free-safe, actif en schedule seulement si `ENABLE_PRIORITY_COLLECTOR=true`.
+- GitHub Actions daily doit devenir le flux officiel vers R2, sans passage obligatoire par Neon.
+- GitHub Actions priority free-safe reste possible plus tard, mais toujours sans Databento automatique.
 - Docker remote collector, Oracle VM et Cloudflare Worker conserves en legacy, hors chemin operationnel.
 - Logs JSONL et resume GitHub Actions par run.
-- Page React `Data` avec action de fetch des donnees manquantes depuis Neon, ou Databento uniquement en manuel.
+- Page React `Data` a faire evoluer vers restore R2 par defaut, Neon en fallback, Databento uniquement en manuel.
 - Section `API Usage` dans `Data`: limites pratiques, decoupage courant, cout/garde-fou, actifs concernes par canal.
-- Commandes `ict live storage` et `ict live prune-remote` pour surveiller Neon et supprimer manuellement les candles anciennes seulement apres verification locale. La retention Neon cible passe a 30 jours; la retention 180 jours reste locale tant qu'une archive objet gratuite n'est pas ajoutee.
+- Commandes Neon conservees pour transition, mais l'objectif est de ne plus dependre de Neon pour stocker les candles gratuites.
 
 Limite actuelle:
 
 - `configs/live_sources.yaml` couvre les 40 actifs: 32 cloud-compatibles gratuits enabled, MNQ/Databento en manuel payant, 7 MT5-only en `pending_cloud_source`.
-- Les actifs cloud enabled sont collectes vers Neon via Coinbase/Kraken ou Dukascopy-node. Databento n'est jamais lance par le scheduler.
+- Les actifs cloud enabled etaient collectes vers Neon via Coinbase/Kraken ou Dukascopy-node. Ce flux doit etre remplace par R2 direct. Databento n'est jamais lance par le scheduler.
 - Les actifs pending restent rattrapes localement via MT5/Data Management tant qu'une source cloud gratuite fiable n'est pas trouvee.
 
 ## Decision MNQ
@@ -87,7 +89,8 @@ Decision 2026-07-07: utiliser Databento pour MNQ tant que les credits disponible
 
 ## Canaux De Fetch Data Management
 
-- `Neon`: canal par defaut pour tous les actifs non Databento; sync depuis l'entrepot remote vers la base locale canonique.
+- `R2`: canal cible par defaut pour tous les actifs gratuits; restore depuis l'archive chiffree vers la base locale canonique.
+- `Neon`: canal de transition/fallback recent, plus canal principal.
 - `Databento`: canal manuel pour `source_type=databento`, principalement MNQ; garde-fou `Max Databento USD` avant telechargement. Reference MNQ M1 2026-01-01 -> 2026-07-01: environ 0.6363 USD.
 
 ## OANDA
