@@ -53,12 +53,18 @@ foreach ($name in $requiredSecrets) {
 foreach ($name in ($requiredSecrets + $optionalSecrets)) {
     if ($envValues.ContainsKey($name) -and $envValues[$name]) {
         $envValues[$name] | gh secret set $name
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to configure GitHub Actions secret: $name"
+        }
         Write-Output "$name configured as GitHub secret."
     }
 }
 
 if ($EnablePriorityCollector) {
     gh variable set ENABLE_PRIORITY_COLLECTOR --body "true"
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to configure GitHub Actions variable: ENABLE_PRIORITY_COLLECTOR"
+    }
     Write-Output "ENABLE_PRIORITY_COLLECTOR configured as GitHub variable."
 } else {
     Write-Output "Priority collector schedule left disabled. Rerun with -EnablePriorityCollector to enable hourly priority runs."
