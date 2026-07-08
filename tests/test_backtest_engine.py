@@ -13,6 +13,69 @@ def _setbar(df: pd.DataFrame, timestamp: str, **values: float) -> None:
 
 
 def test_backtest_records_trade_and_events() -> None:
+    m1 = _sample_trade_frame()
+    params = StrategyParams(
+        only_killzone=False,
+        pd_mode="FVG",
+        strategy_mode="B_NO_S2_INVALIDATION",
+        execution={"fill_policy": "signal_close", "ambiguous_bar_policy": "sl_first"},
+    )
+    result = BacktestEngine(params, tick_size=0.25).run(m1)
+    event_types = [event["event_type"] for event in result.events]
+
+    assert len(result.trades) == 1
+    assert len(result.orders) == 1
+    assert len(result.fills) == 1
+    assert result.orders.iloc[0]["status"] == "filled"
+    assert result.fills.iloc[0]["order_ref"] == result.orders.iloc[0]["order_ref"]
+    assert result.trades.iloc[0]["exit_reason"] == "TP"
+    assert result.metrics["median_rr"] is not None
+    assert result.metrics["avg_trade_duration_seconds"] == 300.0
+    assert "H1_SIGNAL" in event_types
+    assert "M15_DOUBLE_SWING_VALIDATED" in event_types
+    assert "FVG_SELECTED" in event_types
+    assert "TRADE_OPENED" in event_types
+    assert "TRADE_CLOSED_TP" in event_types
+
+
+def test_backtest_records_gap_policy_metrics() -> None:
+    m1 = _sample_trade_frame()
+    m1 = m1[~m1["time_open"].between(pd.Timestamp("2025-01-01 01:00", tz="UTC"), pd.Timestamp("2025-01-01 01:09", tz="UTC"))]
+
+    params = StrategyParams(
+        only_killzone=False,
+        pd_mode="FVG",
+        strategy_mode="B_NO_S2_INVALIDATION",
+        execution={"fill_policy": "signal_close", "ambiguous_bar_policy": "sl_first"},
+    )
+    result = BacktestEngine(params, tick_size=0.25).run(m1)
+    event_types = [event["event_type"] for event in result.events]
+
+    assert "DATA_GAP_SKIPPED" in event_types
+    assert result.metrics["data_gap_count"] == 1
+    assert result.metrics["data_gap_missing_candles"] == 10
+    assert result.metrics["data_gap_segments_used"] >= 1
+
+
+def test_backtest_closes_open_trade_at_run_end() -> None:
+    m1 = _sample_trade_frame()
+    _setbar(m1, "2025-01-01 02:55", open=100, high=101, low=96, close=100)
+    params = StrategyParams(
+        only_killzone=False,
+        pd_mode="FVG",
+        strategy_mode="B_NO_S2_INVALIDATION",
+        execution={"fill_policy": "signal_close", "ambiguous_bar_policy": "sl_first"},
+    )
+
+    result = BacktestEngine(params, tick_size=0.25).run(m1)
+
+    assert len(result.trades) == 1
+    assert result.trades.iloc[0]["exit_reason"] == "RUN_END"
+    assert "TRADE_CLOSED_RUN_END" in [event["event_type"] for event in result.events]
+    assert result.equity_curve.iloc[-1]["open_positions"] == 0
+
+
+def _sample_trade_frame() -> pd.DataFrame:
     times = pd.date_range("2025-01-01 00:00", periods=240, freq="min", tz="UTC")
     m1 = pd.DataFrame(
         {
@@ -37,26 +100,4 @@ def test_backtest_records_trade_and_events() -> None:
     _setbar(m1, "2025-01-01 02:10", open=98, high=99, low=96, close=97)
     _setbar(m1, "2025-01-01 02:50", open=104, high=104, low=100, close=101)
     _setbar(m1, "2025-01-01 02:55", open=100, high=101, low=89, close=90)
-
-    params = StrategyParams(
-        only_killzone=False,
-        pd_mode="FVG",
-        strategy_mode="B_NO_S2_INVALIDATION",
-        execution={"fill_policy": "signal_close", "ambiguous_bar_policy": "sl_first"},
-    )
-    result = BacktestEngine(params, tick_size=0.25).run(m1)
-    event_types = [event["event_type"] for event in result.events]
-
-    assert len(result.trades) == 1
-    assert len(result.orders) == 1
-    assert len(result.fills) == 1
-    assert result.orders.iloc[0]["status"] == "filled"
-    assert result.fills.iloc[0]["order_ref"] == result.orders.iloc[0]["order_ref"]
-    assert result.trades.iloc[0]["exit_reason"] == "TP"
-    assert result.metrics["median_rr"] is not None
-    assert result.metrics["avg_trade_duration_seconds"] == 300.0
-    assert "H1_SIGNAL" in event_types
-    assert "M15_DOUBLE_SWING_VALIDATED" in event_types
-    assert "FVG_SELECTED" in event_types
-    assert "TRADE_OPENED" in event_types
-    assert "TRADE_CLOSED_TP" in event_types
+    return m1

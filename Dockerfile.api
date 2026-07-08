@@ -1,0 +1,24 @@
+FROM python:3.13-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential curl nodejs npm \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY pyproject.toml README.md alembic.ini ./
+COPY alembic ./alembic
+COPY configs ./configs
+COPY ict ./ict
+COPY scripts ./scripts
+
+RUN pip install --upgrade pip \
+    && pip install -e .
+
+EXPOSE 8000
+
+CMD ["python", "-m", "uvicorn", "ict.api.app:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -27,6 +27,7 @@ class TransformContext:
     source_symbol: str
     timeframe: str
     source_timezone: str = "UTC"
+    time_unit: str | None = None
     price_multiplier: float = 1.0
     column_mapping: dict[str, str] = field(default_factory=dict)
 
@@ -62,7 +63,7 @@ class ColumnMappingTransformer(CandleTransformer):
 
         out = pd.DataFrame()
         source_time_column = mapping["time"]
-        parsed_time = pd.to_datetime(raw[source_time_column], errors="raise")
+        parsed_time = pd.to_datetime(raw[source_time_column], errors="raise", unit=context.time_unit)
         if parsed_time.dt.tz is None:
             parsed_time = parsed_time.dt.tz_localize(ZoneInfo(context.source_timezone))
         out["time_open"] = parsed_time.dt.tz_convert("UTC")

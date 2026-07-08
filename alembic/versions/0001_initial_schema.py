@@ -22,6 +22,8 @@ def upgrade() -> None:
     _execute_sql_file(sql_path)
     views_dir = sql_path.parent / "views"
     for view_path in sorted(views_dir.glob("mart_*.sql")):
+        if view_path.name == "mart_live_collector.sql":
+            continue
         _execute_sql_file(view_path)
 
 
@@ -35,6 +37,7 @@ def _split_sql(sql: str) -> list[str]:
 
 
 def downgrade() -> None:
+    op.execute("DROP VIEW IF EXISTS mart_market_coverage")
     op.execute("DROP VIEW IF EXISTS mart_dataset_quality")
     op.execute("DROP VIEW IF EXISTS mart_source_performance")
     op.execute("DROP VIEW IF EXISTS mart_session_performance")

@@ -9,6 +9,7 @@ import pandas as pd
 from ict.backtest.broker_sim import SimulatedTrade, close_reason_for_bar, pnl_points
 from ict.backtest.metrics import summarize_trades
 from ict.data.candles import normalize_candles, timeframe_delta
+from ict.data.gaps import CandleGapPlan, split_continuous_candles
 from ict.strategy.ict_crt_m1 import prepare_market_data
 from ict.strategy.indicators import (
     Pivot,
@@ -60,6 +61,7 @@ class ActiveSetup:
     ote_top: float | None = None
     pd_zone: PriceZone | None = None
     pd_mitigated: bool = False
+    metadata: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -76,6 +78,7 @@ class OpenTrade:
     pd_type: str
     strategy_mode: str
     rr: float
+    metadata: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -88,10 +91,13 @@ class PendingEntry:
     sl: float
     tp: float
     pd_type: str
+    metadata: dict = field(default_factory=dict)
 
 
 class BacktestEngine:
     """Event-driven offline reproduction of the Pine v1.6 setup chain."""
+
+    gap_min_segment_rows = 120
 
     def __init__(self, params: StrategyParams, tick_size: float = 0.25):
         self.params = params
@@ -102,6 +108,10 @@ class BacktestEngine:
         if m1.empty:
             trades = pd.DataFrame()
             return BacktestResult(trades=trades, metrics=summarize_trades(trades))
+
+        gap_plan = split_continuous_candles(m1, "M1", min_segment_rows=self.gap_min_segment_rows)
+        if gap_plan.gaps:
+            return self._run_gap_segments(gap_plan)
 
         prepared = prepare_market_data(m1)
         h1_signals = self._h1_signal_events(prepared.h1)
@@ -345,6 +355,53 @@ class BacktestEngine:
                 }
             )
 
+        if open_trade is not None and self.params.execution.close_open_on_run_end:
+            last_row = m1.iloc[-1]
+            exit_time = pd.Timestamp(last_row["time_open"])
+            exit_price = float(last_row["close"])
+            trade_row = self._close_trade(open_trade, exit_time, exit_price, "RUN_END")
+            trade_rows.append(trade_row)
+            balance += float(trade_row["pnl"])
+            events.append(
+                self._event(
+                    "TRADE_CLOSED_RUN_END",
+                    exit_time,
+                    setup_id=open_trade.setup_id,
+                    direction=open_trade.direction,
+                    price=exit_price,
+                    state_before="IN_POSITION",
+                    state_after="COMPLETED",
+                    metadata={"pnl": trade_row["pnl"], "rr": trade_row["rr"]},
+                )
+            )
+            if equity_rows:
+                final_peak = max(peak_equity, balance)
+                equity_rows[-1]["balance"] = balance
+                equity_rows[-1]["equity"] = balance
+                equity_rows[-1]["drawdown_abs"] = balance - final_peak
+                equity_rows[-1]["drawdown_pct"] = (balance - final_peak) / final_peak if final_peak else 0.0
+                equity_rows[-1]["open_positions"] = 0
+            active = None
+            open_trade = None
+
+        if pending_entry is not None and self.params.execution.close_open_on_run_end:
+            last_row = m1.iloc[-1]
+            exit_time = pd.Timestamp(last_row["time_open"])
+            self._set_order_status(order_rows, pending_entry.order_ref, "cancelled")
+            events.append(
+                self._event(
+                    "ORDER_CANCELLED_RUN_END",
+                    exit_time,
+                    setup_id=pending_entry.setup.setup_id,
+                    direction=pending_entry.direction,
+                    price=float(last_row["close"]),
+                    state_before="ORDER_PENDING",
+                    state_after="CANCELLED",
+                )
+            )
+            active = None
+            pending_entry = None
+
         trades = pd.DataFrame(trade_rows)
         orders = pd.DataFrame(order_rows)
         fills = pd.DataFrame(fill_rows)
@@ -359,6 +416,119 @@ class BacktestEngine:
             equity_curve=equity_curve,
             metrics=metrics,
         )
+
+    def _run_gap_segments(self, gap_plan: CandleGapPlan) -> BacktestResult:
+        initial_balance = float(self.params.execution.initial_balance)
+        current_balance = initial_balance
+        events: list[dict] = [
+            self._event(
+                "DATA_GAP_SKIPPED",
+                gap.before,
+                setup_id="data-gap",
+                state_before="CONTINUOUS",
+                state_after="RESET",
+                metadata=gap.as_dict(),
+            )
+            for gap in gap_plan.gaps
+        ]
+        orders: list[pd.DataFrame] = []
+        fills: list[pd.DataFrame] = []
+        trades: list[pd.DataFrame] = []
+        equities: list[pd.DataFrame] = []
+        open_positions_reset = 0
+
+        for segment_index, segment in enumerate(gap_plan.segments, start=1):
+            result = self.run(segment.frame)
+            prefix = f"seg{segment_index}-"
+            events.extend(self._prefixed_events(result.events, prefix))
+            orders.append(self._prefixed_frame(result.orders, prefix, setup_columns=("setup_id",), ref_columns=("order_ref",)))
+            fills.append(self._prefixed_frame(result.fills, prefix, setup_columns=("setup_id",), ref_columns=("order_ref",)))
+            trades.append(self._prefixed_frame(result.trades, prefix, setup_columns=("setup_id",), ref_columns=()))
+
+            equity = result.equity_curve.copy()
+            if not equity.empty:
+                open_positions_reset += int((equity["open_positions"].iloc[-1] or 0) > 0)
+                offset = current_balance - initial_balance
+                equity["balance"] = pd.to_numeric(equity["balance"], errors="coerce") + offset
+                equity["equity"] = pd.to_numeric(equity["equity"], errors="coerce") + offset
+                current_balance = float(equity["balance"].iloc[-1])
+                equities.append(equity)
+
+        orders_frame = self._concat_frames(orders)
+        fills_frame = self._concat_frames(fills)
+        trades_frame = self._concat_frames(trades)
+        equity_curve = self._recalculate_combined_equity(self._concat_frames(equities))
+        events = sorted(events, key=lambda event: pd.Timestamp(event["event_time"]) if event.get("event_time") else pd.Timestamp.min)
+
+        metrics = summarize_trades(trades_frame)
+        metrics.update(self._event_counts(events, equity_curve))
+        metrics.update(
+            {
+                "data_gap_count": len(gap_plan.gaps),
+                "data_gap_missing_candles": gap_plan.missing_candles,
+                "data_gap_segments_used": len(gap_plan.segments),
+                "data_gap_segments_dropped": len(gap_plan.dropped_segments),
+                "data_gap_dropped_rows": gap_plan.dropped_rows,
+                "data_gap_open_positions_reset": open_positions_reset,
+                "data_gap_policy": {
+                    "timeframe": gap_plan.timeframe,
+                    "expected_delta_seconds": gap_plan.expected_delta_seconds,
+                    "min_segment_rows": self.gap_min_segment_rows,
+                    "gaps": [gap.as_dict() for gap in gap_plan.gaps[:50]],
+                    "dropped_segments": [segment.as_dict() for segment in gap_plan.dropped_segments[:50]],
+                },
+            }
+        )
+        return BacktestResult(
+            events=events,
+            orders=orders_frame,
+            fills=fills_frame,
+            trades=trades_frame,
+            equity_curve=equity_curve,
+            metrics=metrics,
+        )
+
+    def _prefixed_events(self, events: list[dict], prefix: str) -> list[dict]:
+        prefixed = []
+        for event in events:
+            row = dict(event)
+            setup_id = row.get("setup_id")
+            if setup_id and setup_id != "market":
+                row["setup_id"] = f"{prefix}{setup_id}"
+            prefixed.append(row)
+        return prefixed
+
+    def _prefixed_frame(
+        self,
+        frame: pd.DataFrame,
+        prefix: str,
+        setup_columns: tuple[str, ...],
+        ref_columns: tuple[str, ...],
+    ) -> pd.DataFrame:
+        if frame.empty:
+            return frame
+        out = frame.copy()
+        for column in setup_columns:
+            if column in out:
+                out[column] = out[column].map(lambda value: f"{prefix}{value}" if pd.notna(value) else value)
+        for column in ref_columns:
+            if column in out:
+                out[column] = out[column].map(lambda value: f"{prefix}{value}" if pd.notna(value) else value)
+        return out
+
+    def _concat_frames(self, frames: list[pd.DataFrame]) -> pd.DataFrame:
+        usable = [frame for frame in frames if not frame.empty]
+        return pd.concat(usable, ignore_index=True) if usable else pd.DataFrame()
+
+    def _recalculate_combined_equity(self, equity_curve: pd.DataFrame) -> pd.DataFrame:
+        if equity_curve.empty:
+            return equity_curve
+        out = equity_curve.sort_values("time").reset_index(drop=True).copy()
+        equity = pd.to_numeric(out["equity"], errors="coerce")
+        peak = equity.cummax()
+        out["drawdown_abs"] = equity - peak
+        out["drawdown_pct"] = out["drawdown_abs"] / peak.where(peak != 0)
+        return out
 
     def _h1_signal_events(self, h1: pd.DataFrame) -> list[H1SignalEvent]:
         events: list[H1SignalEvent] = []
@@ -636,7 +806,7 @@ class BacktestEngine:
                 "volume": pending.volume,
                 "commission": self.params.execution.commission_per_trade,
                 "slippage": self.params.execution.slippage_ticks * self.tick_size,
-                "metadata": {"fill_policy": self.params.execution.fill_policy},
+                "metadata": {"fill_policy": self.params.execution.fill_policy, **pending.metadata},
             }
         )
         events.append(
@@ -648,7 +818,7 @@ class BacktestEngine:
                 price=entry_price,
                 state_before="ORDER_PENDING",
                 state_after="IN_POSITION",
-                metadata={"sl": pending.sl, "tp": pending.tp, "rr": rr, "pd_type": pending.pd_type},
+                metadata={"sl": pending.sl, "tp": pending.tp, "rr": rr, "pd_type": pending.pd_type, **pending.metadata},
             )
         )
         return OpenTrade(
@@ -664,6 +834,7 @@ class BacktestEngine:
             pd_type=pending.pd_type,
             strategy_mode=self.params.strategy_mode,
             rr=rr,
+            metadata=pending.metadata,
         )
 
     def _ensure_order_row(self, pending: PendingEntry, requested_price: float, order_rows: list[dict]) -> None:
@@ -682,7 +853,11 @@ class BacktestEngine:
                 "tp": pending.tp,
                 "status": "created",
                 "external_order_id": None,
-                "metadata": {"pd_type": pending.pd_type, "fill_policy": self.params.execution.fill_policy},
+                "metadata": {
+                    "pd_type": pending.pd_type,
+                    "fill_policy": self.params.execution.fill_policy,
+                    **pending.metadata,
+                },
             }
         )
 
@@ -720,7 +895,7 @@ class BacktestEngine:
             "pd_type": trade.pd_type,
             "strategy_mode": trade.strategy_mode,
             "session_name": None,
-            "metadata": {},
+            "metadata": trade.metadata,
         }
 
     def _event(

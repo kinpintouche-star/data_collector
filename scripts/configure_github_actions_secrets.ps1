@@ -1,0 +1,56 @@
+param(
+    [string]$EnvFile = ".env",
+    [switch]$EnablePriorityCollector
+)
+
+$ErrorActionPreference = "Stop"
+
+function Read-DotEnv {
+    param([string]$Path)
+    if (-not (Test-Path -LiteralPath $Path)) {
+        throw "Env file not found: $Path"
+    }
+    $values = @{}
+    foreach ($line in Get-Content -LiteralPath $Path) {
+        $trimmed = $line.Trim()
+        if (-not $trimmed -or $trimmed.StartsWith("#") -or -not $trimmed.Contains("=")) {
+            continue
+        }
+        $parts = $trimmed.Split("=", 2)
+        $name = $parts[0].Trim()
+        $value = $parts[1].Trim()
+        if (($value.StartsWith('"') -and $value.EndsWith('"')) -or ($value.StartsWith("'") -and $value.EndsWith("'"))) {
+            $value = $value.Substring(1, $value.Length - 2)
+        }
+        $values[$name] = $value
+    }
+    return $values
+}
+
+if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
+    throw "GitHub CLI 'gh' is not installed. Install it, authenticate with 'gh auth login', then rerun this script."
+}
+
+$envValues = Read-DotEnv -Path $EnvFile
+$requiredSecrets = @("LIVE_REMOTE_DATABASE_URL")
+$optionalSecrets = @("DATABENTO_API_KEY")
+
+foreach ($name in $requiredSecrets) {
+    if (-not $envValues.ContainsKey($name) -or -not $envValues[$name]) {
+        throw "$name is missing or empty in $EnvFile"
+    }
+}
+
+foreach ($name in ($requiredSecrets + $optionalSecrets)) {
+    if ($envValues.ContainsKey($name) -and $envValues[$name]) {
+        $envValues[$name] | gh secret set $name
+        Write-Output "$name configured as GitHub secret."
+    }
+}
+
+if ($EnablePriorityCollector) {
+    gh variable set ENABLE_PRIORITY_COLLECTOR --body "true"
+    Write-Output "ENABLE_PRIORITY_COLLECTOR configured as GitHub variable."
+} else {
+    Write-Output "Priority collector schedule left disabled. Rerun with -EnablePriorityCollector to enable hourly priority runs."
+}

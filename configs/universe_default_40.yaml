@@ -1,0 +1,124 @@
+name: default_40_six_months
+timeframe: M1
+target_months: 6
+assets:
+  - symbol: EURUSD
+    group: forex
+    source: dukascopy
+  - symbol: GBPUSD
+    group: forex
+    source: dukascopy
+  - symbol: USDJPY
+    group: forex
+    source: dukascopy
+  - symbol: USDCHF
+    group: forex
+    source: dukascopy
+  - symbol: USDCAD
+    group: forex
+    source: dukascopy
+  - symbol: AUDUSD
+    group: forex
+    source: dukascopy
+  - symbol: NZDUSD
+    group: forex
+    source: dukascopy
+  - symbol: EURGBP
+    group: forex
+    source: dukascopy
+  - symbol: EURJPY
+    group: forex
+    source: dukascopy
+  - symbol: GBPJPY
+    group: forex
+    source: dukascopy
+  - symbol: AUDJPY
+    group: forex
+    source: dukascopy
+  - symbol: CADJPY
+    group: forex
+    source: dukascopy
+  - symbol: CHFJPY
+    group: forex
+    source: dukascopy
+  - symbol: EURCHF
+    group: forex
+    source: dukascopy
+  - symbol: EURAUD
+    group: forex
+    source: dukascopy
+  - symbol: EURNZD
+    group: forex
+    source: dukascopy
+  - symbol: GBPAUD
+    group: forex
+    source: dukascopy
+  - symbol: GBPNZD
+    group: forex
+    source: dukascopy
+  - symbol: AUDNZD
+    group: forex
+    source: dukascopy
+  - symbol: EURCAD
+    group: forex
+    source: dukascopy
+  - symbol: XAUUSD
+    group: metal
+    source: mt5
+  - symbol: XAGUSD
+    group: metal
+    source: dukascopy
+  - symbol: BTCUSD
+    group: crypto
+    source: binance
+  - symbol: ETHUSD
+    group: crypto
+    source: binance
+  - symbol: BNBUSD
+    group: crypto
+    source: binance
+  - symbol: SOLUSD
+    group: crypto
+    source: binance
+  - symbol: XRPUSD
+    group: crypto
+    source: binance
+  - symbol: ADAUSD
+    group: crypto
+    source: binance
+  - symbol: DOGEUSD
+    group: crypto
+    source: binance
+  - symbol: AVAXUSD
+    group: crypto
+    source: binance
+  - symbol: LINKUSD
+    group: crypto
+    source: binance
+  - symbol: GER40
+    group: index
+    source: dukascopy
+  - symbol: NAS100
+    group: index
+    source: dukascopy
+  - symbol: SPX500
+    group: index
+    source: mt5
+  - symbol: US30
+    group: index
+    source: mt5
+  - symbol: UK100
+    group: index
+    source: mt5
+  - symbol: FRA40
+    group: index
+    source: mt5
+  - symbol: EU50
+    group: index
+    source: mt5
+  - symbol: JPN225
+    group: index
+    source: mt5
+  - symbol: MNQ
+    group: index
+    source: databento_glbx

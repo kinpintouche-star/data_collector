@@ -7,9 +7,10 @@ from sqlalchemy import engine_from_config, pool
 
 from ict.core.config import get_settings
 from ict.db.models import Base
+from ict.db.session import sqlalchemy_database_url
 
 config = context.config
-config.set_main_option("sqlalchemy.url", get_settings().database_url)
+config.set_main_option("sqlalchemy.url", sqlalchemy_database_url(get_settings().database_url))
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

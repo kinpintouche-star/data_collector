@@ -218,6 +218,27 @@ class StrategyVersion(Base, JsonMixin):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class StrategyDefinition(Base, TimestampMixin, JsonMixin):
+    __tablename__ = "strategy_definitions"
+    __table_args__ = (
+        UniqueConstraint("name", "version", name="uq_strategy_definitions_name_version"),
+        Index("idx_strategy_definitions_status", "status"),
+        Index("idx_strategy_definitions_hash", "definition_hash"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    version: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="draft", server_default="draft")
+    description: Mapped[Optional[str]] = mapped_column(Text)
+    definition: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    definition_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    exported_path: Mapped[Optional[str]] = mapped_column(Text)
+    metadata_: Mapped[dict] = mapped_column(
+        "metadata", JSONB, default=dict, server_default=text("'{}'::jsonb"), nullable=False
+    )
+
+
 class ParameterSet(Base, JsonMixin):
     __tablename__ = "parameter_sets"
     __table_args__ = (Index("idx_parameter_sets_params_gin", "params", postgresql_using="gin"),)

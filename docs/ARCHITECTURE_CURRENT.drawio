@@ -1,0 +1,123 @@
+<mxfile host="app.diagrams.net" modified="2026-07-07T00:00:00.000Z" agent="Codex" version="24.7.17" type="device">
+  <diagram id="ict-current-architecture" name="Current Architecture">
+    <mxGraphModel dx="1820" dy="1180" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="ICT Backtesting Platform - Architecture actuelle&#xa;Version actuelle: 2026-07-08" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=24;fontStyle=1;fontColor=#0f172a;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="760" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="update-note" value="Contrat documentaire&#xa;- Ce fichier doit etre mis a jour quand l'architecture change.&#xa;- Ne jamais y stocker de secrets; utiliser seulement les noms d'env vars.&#xa;- Source de verite runtime: docker-compose.yml + README + docs/PROJECT_*." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff7ed;strokeColor=#fb923c;fontSize=13;fontColor=#7c2d12;align=left;spacing=10;" vertex="1" parent="1">
+          <mxGeometry x="860" y="20" width="620" height="90" as="geometry" />
+        </mxCell>
+
+        <mxCell id="host" value="PC local / Docker Compose&#xa;Commande recommandee: .\scripts\dev.ps1 up ou make up" style="swimlane;html=1;whiteSpace=wrap;startSize=38;fillColor=#f8fafc;strokeColor=#64748b;fontStyle=1;fontSize=15;childLayout=stackLayout;horizontal=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="130" width="1040" height="720" as="geometry" />
+        </mxCell>
+
+        <mxCell id="user-browser" value="Utilisateur / Navigateur&#xa;Ouvre l'app locale" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0f2fe;strokeColor=#0284c7;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="90" y="190" width="190" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="dev-tools" value="Helpers locaux&#xa;scripts/dev.ps1&#xa;Makefile&#xa;docker-compose" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f1f5f9;strokeColor=#64748b;fontSize=13;" vertex="1" parent="host">
+          <mxGeometry x="50" y="610" width="200" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="web" value="Container ict_web&#xa;React + TypeScript + Vite&#xa;Port: 5173&#xa;&#xa;Pages principales:&#xa;- Run Lab&#xa;- Strategy Builder&#xa;- Review Trade&#xa;- Analytics" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;fontSize=14;fontStyle=1;align=left;spacing=10;" vertex="1" parent="host">
+          <mxGeometry x="300" y="70" width="260" height="170" as="geometry" />
+        </mxCell>
+        <mxCell id="web-volume" value="Volume web_node_modules&#xa;+ bind mount ./web:/app" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ecfdf5;strokeColor=#22c55e;fontSize=12;align=left;spacing=8;" vertex="1" parent="host">
+          <mxGeometry x="300" y="260" width="260" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="api" value="Container ict_api&#xa;FastAPI + Python domain logic&#xa;Port: 8000&#xa;Health: /api/health&#xa;&#xa;Au demarrage:&#xa;- alembic upgrade head&#xa;- ict db seed-defaults&#xa;&#xa;Fonctions:&#xa;- Run Lab jobs&#xa;- Backtest runner&#xa;- Strategy Builder API&#xa;- Trade review payloads&#xa;- Analytics run/group&#xa;- Sync/data commands" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#2563eb;fontSize=14;fontStyle=1;align=left;spacing=10;" vertex="1" parent="host">
+          <mxGeometry x="620" y="70" width="300" height="290" as="geometry" />
+        </mxCell>
+        <mxCell id="api-volume" value="Bind mount repo&#xa;.:/app&#xa;Code live reload via uvicorn --reload" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eff6ff;strokeColor=#60a5fa;fontSize=12;align=left;spacing=8;" vertex="1" parent="host">
+          <mxGeometry x="620" y="380" width="300" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="postgres" value="Container ict_postgres&#xa;PostgreSQL 16&#xa;Port: 5432&#xa;Volume: postgres_data&#xa;&#xa;Base canonique locale:&#xa;- market_candles&#xa;- symbols / sources / aliases&#xa;- datasets&#xa;- strategy_definitions&#xa;- backtest_runs&#xa;- trades / orders / fills&#xa;- equity_curve / run_metrics&#xa;- collector monitoring tables" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fef3c7;strokeColor=#d97706;fontSize=14;fontStyle=1;align=left;spacing=10;" vertex="1" parent="host">
+          <mxGeometry x="620" y="490" width="300" height="200" as="geometry" />
+        </mxCell>
+
+        <mxCell id="adminer" value="Container ict_adminer&#xa;DB admin UI&#xa;Port: 8080" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3e8ff;strokeColor=#9333ea;fontSize=14;fontStyle=1;" vertex="1" parent="host">
+          <mxGeometry x="300" y="520" width="240" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="streamlit" value="Streamlit dashboard legacy&#xa;python -m ict.cli dashboard&#xa;&#xa;Encore utile pour:&#xa;- Data Management&#xa;- Live Collector&#xa;- Coverage locale&#xa;- Neon -&gt; local" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fce7f3;strokeColor=#db2777;fontSize=13;fontStyle=1;align=left;spacing=8;" vertex="1" parent="host">
+          <mxGeometry x="50" y="360" width="240" height="150" as="geometry" />
+        </mxCell>
+
+        <mxCell id="repo-code" value="Repo local E:\tradinglab&#xa;Configs, code, docs, tests&#xa;docker-compose.yml est la source runtime locale" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8fafc;strokeColor=#475569;fontSize=13;align=left;spacing=8;" vertex="1" parent="host">
+          <mxGeometry x="50" y="520" width="240" height="80" as="geometry" />
+        </mxCell>
+
+        <mxCell id="external" value="Services externes / Sources de donnees" style="swimlane;html=1;whiteSpace=wrap;startSize=38;fillColor=#f8fafc;strokeColor=#64748b;fontStyle=1;fontSize=15;" vertex="1" parent="1">
+          <mxGeometry x="1120" y="130" width="420" height="720" as="geometry" />
+        </mxCell>
+        <mxCell id="neon" value="Neon Postgres remote&#xa;Role actuel: warehouse/buffer live&#xa;Env: LIVE_REMOTE_DATABASE_URL&#xa;Objectif: rolling 180 jours M1 cote service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ccfbf1;strokeColor=#0d9488;fontSize=13;fontStyle=1;align=left;spacing=8;" vertex="1" parent="external">
+          <mxGeometry x="40" y="70" width="340" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="github-actions" value="GitHub Actions collector officiel&#xa;Daily complet + priority free-safe&#xa;Ecrit dans Neon en chunks idempotents&#xa;Logs JSONL + GitHub summary" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e5e7eb;strokeColor=#111827;fontSize=13;fontStyle=1;align=left;spacing=8;" vertex="1" parent="external">
+          <mxGeometry x="40" y="190" width="340" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="cloudflare" value="Legacy collectors&#xa;Cloudflare Worker / Oracle VM / Docker remote&#xa;Hors chemin operationnel" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffedd5;strokeColor=#ea580c;fontSize=13;fontStyle=1;align=left;spacing=8;" vertex="1" parent="external">
+          <mxGeometry x="40" y="300" width="340" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="providers" value="Providers data / Acquisition&#xa;&#xa;GitHub Actions gratuits:&#xa;- Dukascopy-node forex/GER40/NAS100/XAGUSD&#xa;- Coinbase avec fallback Kraken&#xa;&#xa;Manuel payant via app:&#xa;- Databento GLBX pour MNQ uniquement&#xa;&#xa;Historique/local:&#xa;- Dukascopy / Binance archives&#xa;- Data Management Neon ou Databento&#xa;- MT5 terminal local optionnel&#xa;&#xa;Retire pipeline:&#xa;- OANDA" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ede9fe;strokeColor=#7c3aed;fontSize=13;fontStyle=1;align=left;spacing=8;" vertex="1" parent="external">
+          <mxGeometry x="40" y="410" width="340" height="240" as="geometry" />
+        </mxCell>
+
+        <mxCell id="edge-browser-web" value="HTTP 5173" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#0284c7;fontSize=12;" edge="1" parent="1" source="user-browser" target="web">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-web-api" value="/api via VITE_API_BASE_URL&#xa;HTTP 8000" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#2563eb;fontSize=12;" edge="1" parent="1" source="web" target="api">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-api-db" value="SQLAlchemy / psycopg&#xa;DATABASE_URL" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#d97706;fontSize=12;" edge="1" parent="1" source="api" target="postgres">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-adminer-db" value="DB admin" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;strokeColor=#9333ea;fontSize=12;" edge="1" parent="1" source="adminer" target="postgres">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-streamlit-db" value="reads/writes local DB" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;strokeColor=#db2777;fontSize=12;dashed=1;" edge="1" parent="1" source="streamlit" target="postgres">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-dev-compose" value="starts/stops services" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;strokeColor=#64748b;fontSize=12;" edge="1" parent="1" source="dev-tools" target="web">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-dev-api" value="starts API" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;strokeColor=#64748b;fontSize=12;" edge="1" parent="1" source="dev-tools" target="api">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-repo-api" value="bind mount" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;strokeColor=#475569;fontSize=12;" edge="1" parent="1" source="repo-code" target="api-volume">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-repo-web" value="bind mount" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;strokeColor=#475569;fontSize=12;" edge="1" parent="1" source="repo-code" target="web-volume">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-gh-neon" value="daily/priority batch writes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#0d9488;fontSize=12;" edge="1" parent="1" source="github-actions" target="neon">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-providers-gh" value="fetch candles" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;strokeColor=#7c3aed;fontSize=12;" edge="1" parent="1" source="providers" target="github-actions">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-api-neon" value="sync Neon &lt;-&gt; local&#xa;CLI / Data Management" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#0d9488;fontSize=12;dashed=1;" edge="1" parent="1" source="api" target="neon">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-providers-api" value="manual fetch / backfill&#xa;Neon sync / Databento MNQ" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1.5;strokeColor=#7c3aed;fontSize=12;dashed=1;" edge="1" parent="1" source="providers" target="api">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="legend" value="Legende&#xa;Trait plein: chemin principal runtime&#xa;Trait pointille: chemin admin/sync/backfill&#xa;Orange: stockage canonique&#xa;Bleu/vert: API/UI&#xa;Violet: acquisition externe" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#94a3b8;fontSize=12;align=left;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="880" width="410" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="current-limits" value="Limites / decisions actuelles&#xa;- Postgres local reste la base canonique.&#xa;- Neon sert d'entrepot/buffer remote, pas de source principale de backtest.&#xa;- GitHub Actions est le collecteur remote officiel.&#xa;- Oracle VM / Docker remote / Cloudflare sont legacy.&#xa;- OANDA est retire du pipeline operationnel." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fefce8;strokeColor=#ca8a04;fontSize=12;align=left;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="480" y="880" width="540" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="update-rule" value="Regle de maintenance&#xa;Quand un service, un container, une source de donnees ou un flux critique change, mettre a jour:&#xa;1. docs/ARCHITECTURE_CURRENT.drawio&#xa;2. docs/ARCHITECTURE.md&#xa;3. docs/PROJECT_NOW.md / PROJECT_THREAD.md si le jalon change" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ecfeff;strokeColor=#0891b2;fontSize=12;align=left;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="1050" y="880" width="490" height="120" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

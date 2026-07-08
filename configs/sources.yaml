@@ -17,3 +17,37 @@ sources:
     base_timezone: UTC
     is_active: true
     config: {}
+
+  - name: binance
+    source_type: binance_public
+    base_timezone: UTC
+    is_active: true
+    config:
+      market: spot
+      archive_frequency: monthly
+
+  - name: oanda
+    source_type: oanda_rest
+    base_timezone: UTC
+    is_active: false
+    config:
+      environment: practice
+      status: blocked_requires_deposit
+
+  - name: databento_glbx
+    source_type: databento
+    base_timezone: UTC
+    is_active: true
+    config:
+      dataset: GLBX.MDP3
+      schema: ohlcv-1m
+      max_cost_usd: 5.0
+
+  - name: databento_xnas
+    source_type: databento
+    base_timezone: UTC
+    is_active: true
+    config:
+      dataset: XNAS.ITCH
+      schema: ohlcv-1m
+      max_cost_usd: 5.0

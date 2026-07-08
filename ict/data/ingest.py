@@ -6,7 +6,7 @@ from typing import Any
 import pandas as pd
 
 from ict.data.normalizer import TransformContext, transformer_for_source
-from ict.data.providers import CSVProvider, DukascopyCSVProvider
+from ict.data.providers import CSVProvider, DatabentoHistoricalProvider, DukascopyCSVProvider
 from ict.data.quality import analyze_candle_quality, annotate_candle_quality, prepare_candles_for_storage
 from ict.db.repositories import AliasRepository, CandleRepository, ImportJobRepository
 from ict.db.session import session_scope
@@ -17,6 +17,12 @@ def provider_for_source(source_type: str):
         from ict.data.providers.mt5_provider import MT5Provider
 
         return MT5Provider()
+    if source_type == "binance_public":
+        from ict.data.providers.binance_provider import BinancePublicDataProvider
+
+        return BinancePublicDataProvider()
+    if source_type == "databento":
+        return DatabentoHistoricalProvider()
     if source_type == "dukascopy":
         return DukascopyCSVProvider()
     if source_type == "file":
@@ -38,6 +44,7 @@ def ingest_market_data(
         symbol = alias.symbol
         provider = provider_for_source(source.source_type)
         transformer = transformer_for_source(source.source_type)
+        effective_provider_kwargs = {**(source.config or {}), **provider_kwargs}
         job = ImportJobRepository(session).create(
             source.id,
             symbol.id,
@@ -45,18 +52,19 @@ def ingest_market_data(
             timeframe,
             start,
             end,
-            source_params=provider_kwargs,
+            source_params=effective_provider_kwargs,
         )
         job.status = "running"
-        raw = provider.fetch_candles(alias.source_symbol, timeframe, start, end, **provider_kwargs)
+        raw = provider.fetch_candles(alias.source_symbol, timeframe, start, end, **effective_provider_kwargs)
         job.rows_fetched = int(len(raw))
-        mapping = provider_kwargs.get("mapping") or {}
+        mapping = effective_provider_kwargs.get("mapping") or {}
         context = TransformContext(
             source_name=source.name,
             symbol_code=symbol.symbol_code,
             source_symbol=alias.source_symbol,
             timeframe=timeframe.upper(),
-            source_timezone=provider_kwargs.get("timezone") or alias.source_timezone or source.base_timezone or "UTC",
+            source_timezone=effective_provider_kwargs.get("timezone") or alias.source_timezone or source.base_timezone or "UTC",
+            time_unit=effective_provider_kwargs.get("time_unit"),
             price_multiplier=float(alias.price_multiplier or 1),
             column_mapping=mapping,
         )
@@ -104,7 +112,7 @@ def load_csv_mapping(path: str | None) -> dict[str, str]:
 
     with open(path, "r", encoding="utf-8") as handle:
         payload = yaml.safe_load(handle) or {}
-    return {key: value for key, value in payload.items() if key != "timezone"}
+    return {key: value for key, value in payload.items() if key not in {"timezone", "time_unit"}}
 
 
 def load_csv_timezone(path: str | None) -> str | None:
@@ -115,3 +123,13 @@ def load_csv_timezone(path: str | None) -> str | None:
     with open(path, "r", encoding="utf-8") as handle:
         payload = yaml.safe_load(handle) or {}
     return payload.get("timezone")
+
+
+def load_csv_time_unit(path: str | None) -> str | None:
+    if not path:
+        return None
+    import yaml
+
+    with open(path, "r", encoding="utf-8") as handle:
+        payload = yaml.safe_load(handle) or {}
+    return payload.get("time_unit")

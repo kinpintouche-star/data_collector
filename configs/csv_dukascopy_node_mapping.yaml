@@ -1,0 +1,9 @@
+timezone: UTC
+time_unit: ms
+time: timestamp
+open: open
+high: high
+low: low
+close: close
+tick_volume: volume
+real_volume: volume

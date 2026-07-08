@@ -16,6 +16,7 @@ class ExecutionParams(BaseModel):
     order_qty: float = 1.0
     fill_policy: Literal["signal_close", "next_open"] = "signal_close"
     ambiguous_bar_policy: Literal["sl_first", "tp_first", "ohlc_path"] = "sl_first"
+    close_open_on_run_end: bool = True
     commission_per_trade: float = 0.0
     slippage_ticks: int = 0
     max_one_position_per_symbol: bool = True

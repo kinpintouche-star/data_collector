@@ -9,7 +9,7 @@ symbols:
         source_symbol: deuidxeur
         source_timezone: UTC
       - source: mt5
-        source_symbol: GER40.cash
+        source_symbol: DE40
         source_timezone: UTC
       - source: csv
         source_symbol: DAX_GER40_M1
@@ -38,12 +38,415 @@ symbols:
       - source: dukascopy
         source_symbol: eurusd
 
+  - symbol_code: GBPUSD
+    asset_type: forex
+    description: British Pound versus US Dollar
+    base_currency: GBP
+    quote_currency: USD
+    timezone: UTC
+    aliases:
+      - source: mt5
+        source_symbol: GBPUSD
+      - source: dukascopy
+        source_symbol: gbpusd
+      - source: csv
+        source_symbol: GBPUSD_M1
+
+  - symbol_code: USDJPY
+    asset_type: forex
+    description: US Dollar versus Japanese Yen
+    base_currency: USD
+    quote_currency: JPY
+    timezone: UTC
+    aliases:
+      - source: mt5
+        source_symbol: USDJPY
+      - source: dukascopy
+        source_symbol: usdjpy
+      - source: csv
+        source_symbol: USDJPY_M1
+
+  - symbol_code: USDCHF
+    asset_type: forex
+    description: US Dollar versus Swiss Franc
+    base_currency: USD
+    quote_currency: CHF
+    timezone: UTC
+    aliases:
+      - source: mt5
+        source_symbol: USDCHF
+      - source: dukascopy
+        source_symbol: usdchf
+      - source: csv
+        source_symbol: USDCHF_M1
+
+  - symbol_code: USDCAD
+    asset_type: forex
+    description: US Dollar versus Canadian Dollar
+    base_currency: USD
+    quote_currency: CAD
+    timezone: UTC
+    aliases:
+      - source: mt5
+        source_symbol: USDCAD
+      - source: dukascopy
+        source_symbol: usdcad
+      - source: csv
+        source_symbol: USDCAD_M1
+
+  - symbol_code: AUDUSD
+    asset_type: forex
+    description: Australian Dollar versus US Dollar
+    base_currency: AUD
+    quote_currency: USD
+    timezone: UTC
+    aliases:
+      - source: mt5
+        source_symbol: AUDUSD
+      - source: dukascopy
+        source_symbol: audusd
+      - source: csv
+        source_symbol: AUDUSD_M1
+
+  - symbol_code: NZDUSD
+    asset_type: forex
+    description: New Zealand Dollar versus US Dollar
+    base_currency: NZD
+    quote_currency: USD
+    timezone: UTC
+    aliases:
+      - source: mt5
+        source_symbol: NZDUSD
+      - source: dukascopy
+        source_symbol: nzdusd
+      - source: csv
+        source_symbol: NZDUSD_M1
+
+  - symbol_code: EURGBP
+    asset_type: forex
+    description: Euro versus British Pound
+    base_currency: EUR
+    quote_currency: GBP
+    timezone: UTC
+    aliases:
+      - source: mt5
+        source_symbol: EURGBP
+      - source: dukascopy
+        source_symbol: eurgbp
+      - source: csv
+        source_symbol: EURGBP_M1
+
+  - symbol_code: EURJPY
+    asset_type: forex
+    description: Euro versus Japanese Yen
+    base_currency: EUR
+    quote_currency: JPY
+    timezone: UTC
+    aliases:
+      - source: mt5
+        source_symbol: EURJPY
+      - source: dukascopy
+        source_symbol: eurjpy
+      - source: csv
+        source_symbol: EURJPY_M1
+
+  - symbol_code: GBPJPY
+    asset_type: forex
+    description: British Pound versus Japanese Yen
+    base_currency: GBP
+    quote_currency: JPY
+    timezone: UTC
+    aliases:
+      - source: mt5
+        source_symbol: GBPJPY
+      - source: dukascopy
+        source_symbol: gbpjpy
+      - source: csv
+        source_symbol: GBPJPY_M1
+
+  - symbol_code: AUDJPY
+    asset_type: forex
+    description: Australian Dollar versus Japanese Yen
+    base_currency: AUD
+    quote_currency: JPY
+    timezone: UTC
+    aliases:
+      - source: mt5
+        source_symbol: AUDJPY
+      - source: dukascopy
+        source_symbol: audjpy
+      - source: csv
+        source_symbol: AUDJPY_M1
+
+  - symbol_code: CADJPY
+    asset_type: forex
+    description: Canadian Dollar versus Japanese Yen
+    base_currency: CAD
+    quote_currency: JPY
+    timezone: UTC
+    aliases:
+      - source: mt5
+        source_symbol: CADJPY
+      - source: dukascopy
+        source_symbol: cadjpy
+      - source: csv
+        source_symbol: CADJPY_M1
+
+  - symbol_code: CHFJPY
+    asset_type: forex
+    description: Swiss Franc versus Japanese Yen
+    base_currency: CHF
+    quote_currency: JPY
+    timezone: UTC
+    aliases:
+      - source: mt5
+        source_symbol: CHFJPY
+      - source: dukascopy
+        source_symbol: chfjpy
+      - source: csv
+        source_symbol: CHFJPY_M1
+
+  - symbol_code: EURCHF
+    asset_type: forex
+    description: Euro versus Swiss Franc
+    base_currency: EUR
+    quote_currency: CHF
+    timezone: UTC
+    aliases:
+      - source: mt5
+        source_symbol: EURCHF
+      - source: dukascopy
+        source_symbol: eurchf
+      - source: csv
+        source_symbol: EURCHF_M1
+
+  - symbol_code: EURAUD
+    asset_type: forex
+    description: Euro versus Australian Dollar
+    base_currency: EUR
+    quote_currency: AUD
+    timezone: UTC
+    aliases:
+      - source: mt5
+        source_symbol: EURAUD
+      - source: dukascopy
+        source_symbol: euraud
+      - source: csv
+        source_symbol: EURAUD_M1
+
+  - symbol_code: EURNZD
+    asset_type: forex
+    description: Euro versus New Zealand Dollar
+    base_currency: EUR
+    quote_currency: NZD
+    timezone: UTC
+    aliases:
+      - source: mt5
+        source_symbol: EURNZD
+      - source: dukascopy
+        source_symbol: eurnzd
+      - source: csv
+        source_symbol: EURNZD_M1
+
+  - symbol_code: GBPAUD
+    asset_type: forex
+    description: British Pound versus Australian Dollar
+    base_currency: GBP
+    quote_currency: AUD
+    timezone: UTC
+    aliases:
+      - source: mt5
+        source_symbol: GBPAUD
+      - source: dukascopy
+        source_symbol: gbpaud
+      - source: csv
+        source_symbol: GBPAUD_M1
+
+  - symbol_code: GBPNZD
+    asset_type: forex
+    description: British Pound versus New Zealand Dollar
+    base_currency: GBP
+    quote_currency: NZD
+    timezone: UTC
+    aliases:
+      - source: mt5
+        source_symbol: GBPNZD
+      - source: dukascopy
+        source_symbol: gbpnzd
+      - source: csv
+        source_symbol: GBPNZD_M1
+
+  - symbol_code: AUDNZD
+    asset_type: forex
+    description: Australian Dollar versus New Zealand Dollar
+    base_currency: AUD
+    quote_currency: NZD
+    timezone: UTC
+    aliases:
+      - source: mt5
+        source_symbol: AUDNZD
+      - source: dukascopy
+        source_symbol: audnzd
+      - source: csv
+        source_symbol: AUDNZD_M1
+
+  - symbol_code: EURCAD
+    asset_type: forex
+    description: Euro versus Canadian Dollar
+    base_currency: EUR
+    quote_currency: CAD
+    timezone: UTC
+    aliases:
+      - source: mt5
+        source_symbol: EURCAD
+      - source: dukascopy
+        source_symbol: eurcad
+      - source: csv
+        source_symbol: EURCAD_M1
+
+  - symbol_code: XAGUSD
+    asset_type: metal
+    description: Silver versus US Dollar
+    price_currency: USD
+    timezone: UTC
+    aliases:
+      - source: mt5
+        source_symbol: XAGUSD
+      - source: dukascopy
+        source_symbol: xagusd
+      - source: csv
+        source_symbol: XAGUSD_M1
+
+  - symbol_code: BTCUSD
+    asset_type: crypto
+    description: Bitcoin versus US Dollar
+    base_currency: BTC
+    quote_currency: USD
+    timezone: UTC
+    aliases:
+      - source: binance
+        source_symbol: BTCUSDT
+        source_timezone: UTC
+      - source: mt5
+        source_symbol: BTCUSD
+      - source: csv
+        source_symbol: BTCUSD_M1
+
+  - symbol_code: ETHUSD
+    asset_type: crypto
+    description: Ether versus US Dollar
+    base_currency: ETH
+    quote_currency: USD
+    timezone: UTC
+    aliases:
+      - source: binance
+        source_symbol: ETHUSDT
+        source_timezone: UTC
+      - source: mt5
+        source_symbol: ETHUSD
+      - source: csv
+        source_symbol: ETHUSD_M1
+
+  - symbol_code: BNBUSD
+    asset_type: crypto
+    description: BNB versus US Dollar
+    base_currency: BNB
+    quote_currency: USD
+    timezone: UTC
+    aliases:
+      - source: binance
+        source_symbol: BNBUSDT
+        source_timezone: UTC
+      - source: csv
+        source_symbol: BNBUSD_M1
+
+  - symbol_code: SOLUSD
+    asset_type: crypto
+    description: Solana versus US Dollar
+    base_currency: SOL
+    quote_currency: USD
+    timezone: UTC
+    aliases:
+      - source: binance
+        source_symbol: SOLUSDT
+        source_timezone: UTC
+      - source: csv
+        source_symbol: SOLUSD_M1
+
+  - symbol_code: XRPUSD
+    asset_type: crypto
+    description: XRP versus US Dollar
+    base_currency: XRP
+    quote_currency: USD
+    timezone: UTC
+    aliases:
+      - source: binance
+        source_symbol: XRPUSDT
+        source_timezone: UTC
+      - source: csv
+        source_symbol: XRPUSD_M1
+
+  - symbol_code: ADAUSD
+    asset_type: crypto
+    description: Cardano versus US Dollar
+    base_currency: ADA
+    quote_currency: USD
+    timezone: UTC
+    aliases:
+      - source: binance
+        source_symbol: ADAUSDT
+        source_timezone: UTC
+      - source: csv
+        source_symbol: ADAUSD_M1
+
+  - symbol_code: DOGEUSD
+    asset_type: crypto
+    description: Dogecoin versus US Dollar
+    base_currency: DOGE
+    quote_currency: USD
+    timezone: UTC
+    aliases:
+      - source: binance
+        source_symbol: DOGEUSDT
+        source_timezone: UTC
+      - source: csv
+        source_symbol: DOGEUSD_M1
+
+  - symbol_code: AVAXUSD
+    asset_type: crypto
+    description: Avalanche versus US Dollar
+    base_currency: AVAX
+    quote_currency: USD
+    timezone: UTC
+    aliases:
+      - source: binance
+        source_symbol: AVAXUSDT
+        source_timezone: UTC
+      - source: csv
+        source_symbol: AVAXUSD_M1
+
+  - symbol_code: LINKUSD
+    asset_type: crypto
+    description: Chainlink versus US Dollar
+    base_currency: LINK
+    quote_currency: USD
+    timezone: UTC
+    aliases:
+      - source: binance
+        source_symbol: LINKUSDT
+        source_timezone: UTC
+      - source: csv
+        source_symbol: LINKUSD_M1
+
   - symbol_code: NAS100
     asset_type: index_cfd
     description: Nasdaq 100 Index
     price_currency: USD
     timezone: America/New_York
     aliases:
+      - source: dukascopy
+        source_symbol: usatechidxusd
+        source_timezone: UTC
       - source: mt5
         source_symbol: USTEC
         source_timezone: UTC
@@ -51,15 +454,140 @@ symbols:
         source_symbol: NAS100_M1
         source_timezone: UTC
 
+  - symbol_code: SPX500
+    asset_type: index_cfd
+    description: S&P 500 Index CFD
+    price_currency: USD
+    timezone: America/New_York
+    aliases:
+      - source: mt5
+        source_symbol: US500
+        source_timezone: UTC
+      - source: csv
+        source_symbol: SPX500_M1
+        source_timezone: UTC
+
+  - symbol_code: US30
+    asset_type: index_cfd
+    description: Dow Jones 30 Index CFD
+    price_currency: USD
+    timezone: America/New_York
+    aliases:
+      - source: mt5
+        source_symbol: US30
+        source_timezone: UTC
+      - source: csv
+        source_symbol: US30_M1
+        source_timezone: UTC
+
+  - symbol_code: UK100
+    asset_type: index_cfd
+    description: UK 100 Index CFD
+    price_currency: GBP
+    timezone: Europe/London
+    aliases:
+      - source: mt5
+        source_symbol: UK100
+        source_timezone: UTC
+      - source: csv
+        source_symbol: UK100_M1
+        source_timezone: UTC
+
+  - symbol_code: FRA40
+    asset_type: index_cfd
+    description: France 40 Index CFD
+    price_currency: EUR
+    timezone: Europe/Paris
+    aliases:
+      - source: mt5
+        source_symbol: FRA40
+        source_timezone: UTC
+      - source: csv
+        source_symbol: FRA40_M1
+        source_timezone: UTC
+
+  - symbol_code: EU50
+    asset_type: index_cfd
+    description: Euro Stoxx 50 Index CFD
+    price_currency: EUR
+    timezone: Europe/Berlin
+    aliases:
+      - source: mt5
+        source_symbol: EUSTX50
+        source_timezone: UTC
+      - source: csv
+        source_symbol: EU50_M1
+        source_timezone: UTC
+
+  - symbol_code: JPN225
+    asset_type: index_cfd
+    description: Japan 225 Index CFD
+    price_currency: JPY
+    timezone: Asia/Tokyo
+    aliases:
+      - source: mt5
+        source_symbol: JPN225
+        source_timezone: UTC
+      - source: csv
+        source_symbol: JPN225_M1
+        source_timezone: UTC
+
+  - symbol_code: HK50
+    asset_type: index_cfd
+    description: Hong Kong 50 Index CFD
+    price_currency: HKD
+    timezone: Asia/Hong_Kong
+    aliases:
+      - source: mt5
+        source_symbol: HK50
+        source_timezone: UTC
+      - source: csv
+        source_symbol: HK50_M1
+        source_timezone: UTC
+
+  - symbol_code: USOIL
+    asset_type: commodity_cfd
+    description: WTI Crude Oil CFD
+    price_currency: USD
+    timezone: America/New_York
+    aliases:
+      - source: mt5
+        source_symbol: USOIL
+        source_timezone: UTC
+      - source: csv
+        source_symbol: USOIL_M1
+        source_timezone: UTC
+
+  - symbol_code: UKOIL
+    asset_type: commodity_cfd
+    description: Brent Crude Oil CFD
+    price_currency: USD
+    timezone: Europe/London
+    aliases:
+      - source: mt5
+        source_symbol: UKOIL
+        source_timezone: UTC
+      - source: csv
+        source_symbol: UKOIL_M1
+        source_timezone: UTC
+
   - symbol_code: MNQ
-    asset_type: futures_proxy
-    description: Micro Nasdaq 100 proxy via MT5 USTECH100mini
+    asset_type: futures
+    description: Micro E-mini Nasdaq-100 Futures
     price_currency: USD
     exchange: CME
     timezone: America/New_York
     metadata:
-      note: "Broker terminal does not expose native MNQ; USTECH100M is used as the MT5 mini Nasdaq proxy."
+      note: "Databento GLBX.MDP3 is the preferred native MNQ source. MT5 USTECH100M remains an exploratory proxy only."
     aliases:
+      - source: databento_glbx
+        source_symbol: MNQ.c.0
+        source_timezone: UTC
+        metadata:
+          dataset: GLBX.MDP3
+          schema: ohlcv-1m
+          stype_in: continuous
+          roll_policy: front_continuous
       - source: mt5
         source_symbol: USTECH100M
         source_timezone: UTC
@@ -69,3 +597,17 @@ symbols:
       - source: csv
         source_symbol: MNQ_M1
         source_timezone: UTC
+
+  - symbol_code: MSFT
+    asset_type: equity
+    description: Microsoft Corporation common stock
+    price_currency: USD
+    exchange: XNAS
+    timezone: America/New_York
+    aliases:
+      - source: databento_xnas
+        source_symbol: MSFT
+        source_timezone: UTC
+        metadata:
+          dataset: XNAS.ITCH
+          schema: ohlcv-1m

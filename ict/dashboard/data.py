@@ -8,10 +8,71 @@ from typing import Any
 import pandas as pd
 
 
-PAGES = ["Overview", "Runs", "Datasets", "Funnel", "Trades", "Performance", "Parameters", "Sources"]
+PAGES = [
+    "Overview",
+    "Chart",
+    "Coverage",
+    "Data Management",
+    "Live Collector",
+    "Runs",
+    "Datasets",
+    "Funnel",
+    "Trades",
+    "Performance",
+    "Parameters",
+    "Sources",
+]
 
 DASHBOARD_QUERIES = {
     "Overview": "SELECT * FROM mart_run_summary ORDER BY created_at DESC LIMIT 500",
+    "Chart": "SELECT * FROM mart_run_summary ORDER BY created_at DESC LIMIT 500",
+    "Coverage": "SELECT * FROM mart_market_coverage ORDER BY symbol_code, source_name, timeframe",
+    "Data Management": "SELECT * FROM mart_market_coverage ORDER BY symbol_code, source_name, timeframe",
+    "Data Sources": "SELECT name AS source_name, source_type, config FROM data_sources ORDER BY name",
+    "Live Collector": "SELECT * FROM mart_live_collector ORDER BY enabled DESC, priority, symbol_code, source_name",
+    "Live Runs": "SELECT * FROM collector_runs ORDER BY started_at DESC LIMIT 100",
+    "Live Incidents": "SELECT * FROM collector_incidents ORDER BY status, last_seen_at DESC LIMIT 500",
+    "Gaps": """
+        WITH ordered AS (
+            SELECT
+                s.symbol_code,
+                ds.name AS source_name,
+                c.timeframe,
+                c.time_open,
+                LAG(c.time_open) OVER (
+                    PARTITION BY c.symbol_id, c.source_id, c.timeframe
+                    ORDER BY c.time_open
+                ) AS previous_time
+            FROM market_candles c
+            JOIN symbols s ON s.id = c.symbol_id
+            JOIN data_sources ds ON ds.id = c.source_id
+            WHERE c.timeframe = 'M1'
+        ),
+        gaps AS (
+            SELECT
+                symbol_code,
+                source_name,
+                timeframe,
+                previous_time AS after_time,
+                time_open AS before_time,
+                (EXTRACT(EPOCH FROM (time_open - previous_time)) / 60)::integer - 1 AS missing_candles
+            FROM ordered
+            WHERE previous_time IS NOT NULL
+                AND time_open - previous_time > interval '1 minute'
+        )
+        SELECT
+            symbol_code,
+            source_name,
+            timeframe,
+            COUNT(*) AS gap_events,
+            SUM(missing_candles)::integer AS missing_candles,
+            MAX(missing_candles)::integer AS largest_gap_candles,
+            MAX(before_time) AS latest_gap_before,
+            MIN(after_time) AS first_gap_after
+        FROM gaps
+        GROUP BY symbol_code, source_name, timeframe
+        ORDER BY missing_candles DESC, symbol_code, source_name
+    """,
     "Runs": "SELECT * FROM mart_run_summary ORDER BY created_at DESC LIMIT 500",
     "Datasets": "SELECT * FROM mart_dataset_quality ORDER BY created_at DESC LIMIT 1000",
     "Funnel": "SELECT * FROM mart_setup_funnel ORDER BY run_id",

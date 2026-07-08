@@ -38,10 +38,16 @@ def timeframe_delta(timeframe: str) -> pd.Timedelta:
     normalized = timeframe.upper()
     if normalized == "M1":
         return pd.Timedelta(minutes=1)
+    if normalized == "M5":
+        return pd.Timedelta(minutes=5)
     if normalized == "M15":
         return pd.Timedelta(minutes=15)
+    if normalized == "M30":
+        return pd.Timedelta(minutes=30)
     if normalized == "H1":
         return pd.Timedelta(hours=1)
+    if normalized == "H4":
+        return pd.Timedelta(hours=4)
     if normalized == "D1":
         return pd.Timedelta(days=1)
     raise ValueError(f"Unsupported timeframe: {timeframe}")

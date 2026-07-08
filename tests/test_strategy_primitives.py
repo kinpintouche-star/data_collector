@@ -4,11 +4,19 @@ import pandas as pd
 
 from ict.strategy.indicators import (
     crt_signal,
+    detect_amd_phases,
+    detect_equal_high_lows,
+    detect_immediate_rebalances,
     fib_level,
+    detect_session_ranges,
+    detect_structure_breaks,
+    immediate_rebalance_extension_confirmed,
+    immediate_rebalance_failed,
     ote_zone,
     pd_touched,
     rejection_confirmed,
     risk_is_valid,
+    Pivot,
     s2_inside_rule,
     s2_invalidated,
 )
@@ -161,3 +169,125 @@ def test_crt_sweep_back_in_signal() -> None:
 
     assert signal is not None
     assert signal.direction == "bearish"
+
+
+def test_immediate_rebalance_detection_and_invalidation() -> None:
+    candles = pd.DataFrame(
+        {
+            "time_open": pd.date_range("2025-01-01", periods=7, freq="min", tz="UTC"),
+            "open": [100.0, 101.0, 103.0, 110.0, 109.0, 106.0, 104.0],
+            "high": [102.0, 109.0, 104.0, 111.0, 110.0, 111.0, 105.0],
+            "low": [99.0, 100.0, 99.0, 100.0, 101.0, 103.0, 102.0],
+            "close": [101.0, 108.0, 103.8, 109.0, 102.0, 104.0, 103.0],
+        }
+    )
+
+    bullish, bearish = detect_immediate_rebalances(
+        candles,
+        timeframe="M1",
+        tick_size=0.1,
+        tolerance_ticks=1,
+        min_impulse_body_ticks=10,
+    )
+
+    assert bullish.direction == "bullish"
+    assert bullish.origin_price == 99.0
+    assert bullish.rebalance_price == 99.0
+    assert bullish.invalidation_price == 101.0
+    assert bullish.available_time == pd.Timestamp("2025-01-01 00:03", tz="UTC")
+    assert immediate_rebalance_failed(bullish, {"close": 100.9})
+    bullish_extension = pd.DataFrame(
+        {
+            "time_open": pd.date_range("2025-01-01 00:02", periods=3, freq="min", tz="UTC"),
+            "open": [103.0, 104.0, 106.0],
+            "high": [104.0, 107.0, 109.0],
+            "low": [99.0, 103.8, 105.8],
+            "close": [103.8, 106.5, 108.5],
+        }
+    )
+    assert immediate_rebalance_extension_confirmed(bullish, bullish_extension, extension_candles=2, min_body_ratio=0.2)
+
+    assert bearish.direction == "bearish"
+    assert bearish.origin_price == 111.0
+    assert bearish.rebalance_price == 111.0
+    assert bearish.invalidation_price == 109.0
+    assert immediate_rebalance_failed(bearish, {"close": 109.1})
+
+
+def test_session_range_crosses_midnight_without_future_leakage() -> None:
+    candles = pd.DataFrame(
+        {
+            "time_open": pd.date_range("2025-01-01 21:00", periods=300, freq="min", tz="UTC"),
+            "open": 100.0,
+            "high": 101.0,
+            "low": 99.0,
+            "close": 100.0,
+        }
+    )
+    candles.loc[candles["time_open"] == pd.Timestamp("2025-01-01 23:15", tz="UTC"), "high"] = 110.0
+    candles.loc[candles["time_open"] == pd.Timestamp("2025-01-02 00:30", tz="UTC"), "low"] = 92.0
+
+    sessions = detect_session_ranges(candles, "asian", timezone_name="UTC", start="22:00", end="01:00")
+
+    assert len(sessions) == 1
+    assert sessions[0].high == 110.0
+    assert sessions[0].low == 92.0
+    assert sessions[0].available_time == pd.Timestamp("2025-01-02 01:00", tz="UTC")
+
+
+def test_equal_high_lows_with_tick_tolerance() -> None:
+    base = pd.Timestamp("2025-01-01", tz="UTC")
+    pivots = [
+        Pivot("high", base, base + pd.Timedelta(minutes=1), 100.0, 99.0, 98.0),
+        Pivot("high", base + pd.Timedelta(minutes=10), base + pd.Timedelta(minutes=11), 100.4, 99.0, 98.0),
+        Pivot("low", base + pd.Timedelta(minutes=20), base + pd.Timedelta(minutes=21), 90.0, 91.0, 92.0),
+    ]
+
+    levels = detect_equal_high_lows(pivots, tick_size=0.25, tolerance_ticks=2)
+
+    assert len(levels) == 1
+    assert levels[0].kind == "high"
+    assert levels[0].touches == 2
+    assert levels[0].available_time == base + pd.Timedelta(minutes=11)
+
+
+def test_structure_break_detects_bos_after_confirmed_swings() -> None:
+    times = pd.date_range("2025-01-01", periods=8, freq="min", tz="UTC")
+    candles = pd.DataFrame(
+        {
+            "time_open": times,
+            "open": [100, 101, 102, 103, 104, 105, 110, 111],
+            "high": [101, 103, 104, 105, 106, 109, 112, 113],
+            "low": [99, 100, 101, 102, 103, 104, 109, 110],
+            "close": [100, 102, 103, 104, 105, 108, 111, 112],
+        }
+    )
+    pivots = [
+        Pivot("high", times[1], times[2], 103.0, 101.0, 102.0),
+        Pivot("low", times[2], times[3], 100.0, 101.0, 102.0),
+        Pivot("high", times[4], times[5], 109.0, 106.0, 108.0),
+        Pivot("low", times[5], times[6], 104.0, 105.0, 106.0),
+    ]
+
+    breaks = detect_structure_breaks(candles, pivots, timeframe="M1")
+
+    assert any(item.kind == "BOS" and item.direction == "bullish" and item.level == 109.0 for item in breaks)
+
+
+def test_amd_phase_detects_range_sweep_displacement() -> None:
+    candles = pd.DataFrame(
+        {
+            "time_open": pd.date_range("2025-01-01", periods=6, freq="min", tz="UTC"),
+            "open": [100.0, 100.2, 99.8, 100.1, 99.4, 101.0],
+            "high": [101.0, 100.8, 100.6, 100.9, 100.2, 103.2],
+            "low": [99.0, 99.3, 99.2, 99.1, 98.5, 100.9],
+            "close": [100.2, 99.9, 100.1, 100.0, 99.5, 103.0],
+        }
+    )
+
+    phases = detect_amd_phases(candles, timeframe="M1", range_bars=4, displacement_multiplier=0.8)
+
+    assert len(phases) == 1
+    assert phases[0].phase == "accumulation_candidate"
+    assert phases[0].direction == "bullish"
+    assert phases[0].available_time == pd.Timestamp("2025-01-01 00:06", tz="UTC")

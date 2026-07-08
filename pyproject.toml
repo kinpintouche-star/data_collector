@@ -22,7 +22,10 @@ dependencies = [
     "rich>=13.7",
     "streamlit>=1.35",
     "plotly>=5.22",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
     "python-dotenv>=1.0",
+    "databento>=0.80",
 ]
 
 [project.optional-dependencies]

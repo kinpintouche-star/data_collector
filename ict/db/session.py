@@ -11,7 +11,15 @@ from ict.core.config import get_settings
 
 
 def build_engine(database_url: str | None = None) -> Engine:
-    return create_engine(database_url or get_settings().database_url, pool_pre_ping=True)
+    return create_engine(sqlalchemy_database_url(database_url or get_settings().database_url), pool_pre_ping=True)
+
+
+def sqlalchemy_database_url(database_url: str) -> str:
+    if database_url.startswith("postgresql://"):
+        return "postgresql+psycopg://" + database_url.removeprefix("postgresql://")
+    if database_url.startswith("postgres://"):
+        return "postgresql+psycopg://" + database_url.removeprefix("postgres://")
+    return database_url
 
 
 def build_sessionmaker(database_url: str | None = None) -> sessionmaker[Session]:

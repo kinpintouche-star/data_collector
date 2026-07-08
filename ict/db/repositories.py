@@ -24,6 +24,7 @@ from ict.db.models import (
     ParameterSet,
     RunMetric,
     SetupEvent,
+    StrategyDefinition,
     StrategyVersion,
     Symbol,
     SymbolAlias,
@@ -81,6 +82,11 @@ def db_insert_values(values: dict[str, Any]) -> dict[str, Any]:
         if json_key in out:
             out[json_key] = json_safe(out[json_key])
     return out
+
+
+def _batches(items: list[Any], size: int) -> Iterable[list[Any]]:
+    for index in range(0, len(items), size):
+        yield items[index : index + size]
 
 
 class SourceRepository:
@@ -199,6 +205,12 @@ class CandleRepository:
         rows = list(rows)
         if not rows:
             return 0
+        written = 0
+        for batch in _batches(rows, 2000):
+            written += self._upsert_candle_batch(batch)
+        return written
+
+    def _upsert_candle_batch(self, rows: list[dict[str, Any]]) -> int:
         table = MarketCandle.__table__
         stmt = insert(table).values(rows)
         excluded = stmt.excluded
@@ -232,17 +244,20 @@ class CandleRepository:
         times = list(time_opens)
         if not times:
             return 0
-        return int(
-            self.session.scalar(
-                select(func.count())
-                .select_from(MarketCandle)
-                .where(MarketCandle.symbol_id == symbol_id)
-                .where(MarketCandle.source_id == source_id)
-                .where(MarketCandle.timeframe == timeframe.upper())
-                .where(MarketCandle.time_open.in_(times))
+        existing = 0
+        for batch in _batches(times, 50000):
+            existing += int(
+                self.session.scalar(
+                    select(func.count())
+                    .select_from(MarketCandle)
+                    .where(MarketCandle.symbol_id == symbol_id)
+                    .where(MarketCandle.source_id == source_id)
+                    .where(MarketCandle.timeframe == timeframe.upper())
+                    .where(MarketCandle.time_open.in_(batch))
+                )
+                or 0
             )
-            or 0
-        )
+        return existing
 
     def load_candles(
         self,
@@ -417,22 +432,114 @@ class StrategyRepository:
         self,
         name: str = "ICT_CRT_M1",
         version: str = "python-v1.6",
+        source: str = "python",
         source_reference: str = "ICT_CRT_M1_Strategy_v1_6_Clean.pine",
+        description: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> uuid.UUID:
         values = {
             "name": name,
             "version": version,
-            "source": "python",
+            "source": source,
             "source_reference": source_reference,
-            "metadata": {},
+            "description": description,
+            "metadata": json_safe(metadata or {}),
         }
         table = StrategyVersion.__table__
         stmt = insert(table).values(**values)
         stmt = stmt.on_conflict_do_update(
             index_elements=[table.c.name, table.c.version],
-            set_={"source_reference": source_reference},
+            set_={
+                "source": source,
+                "source_reference": source_reference,
+                "description": description,
+                "metadata": json_safe(metadata or {}),
+            },
         ).returning(table.c.id)
         return self.session.execute(stmt).scalar_one()
+
+
+class StrategyDefinitionRepository:
+    def __init__(self, session: Session):
+        self.session = session
+
+    def create(
+        self,
+        name: str,
+        version: str,
+        definition: dict[str, Any],
+        definition_hash: str,
+        description: str | None = None,
+        status: str = "draft",
+    ) -> StrategyDefinition:
+        row = StrategyDefinition(
+            name=name,
+            version=version,
+            status=status,
+            description=description,
+            definition=json_safe(definition),
+            definition_hash=definition_hash,
+            metadata_={},
+        )
+        self.session.add(row)
+        self.session.flush()
+        return row
+
+    def get(self, definition_id: uuid.UUID) -> StrategyDefinition | None:
+        return self.session.get(StrategyDefinition, definition_id)
+
+    def require(self, definition_id: uuid.UUID | str) -> StrategyDefinition:
+        parsed = uuid.UUID(str(definition_id))
+        row = self.get(parsed)
+        if row is None:
+            raise ValueError(f"Strategy definition not found: {definition_id}")
+        return row
+
+    def list(self) -> list[StrategyDefinition]:
+        query = select(StrategyDefinition).order_by(
+            StrategyDefinition.updated_at.desc(),
+            StrategyDefinition.created_at.desc(),
+        )
+        return list(self.session.scalars(query))
+
+    def update(
+        self,
+        row: StrategyDefinition,
+        *,
+        name: str | None = None,
+        version: str | None = None,
+        description: str | None = None,
+        definition: dict[str, Any] | None = None,
+        definition_hash: str | None = None,
+    ) -> StrategyDefinition:
+        if row.status != "draft":
+            raise ValueError("Only draft strategy definitions can be edited.")
+        if name is not None:
+            row.name = name
+        if version is not None:
+            row.version = version
+        if description is not None:
+            row.description = description
+        if definition is not None:
+            row.definition = json_safe(definition)
+        if definition_hash is not None:
+            row.definition_hash = definition_hash
+        self.session.flush()
+        return row
+
+    def set_status(self, row: StrategyDefinition, status: str) -> StrategyDefinition:
+        row.status = status
+        self.session.flush()
+        return row
+
+    def set_exported_path(self, row: StrategyDefinition, exported_path: str) -> StrategyDefinition:
+        row.exported_path = exported_path
+        self.session.flush()
+        return row
+
+    def delete(self, row: StrategyDefinition) -> None:
+        self.session.delete(row)
+        self.session.flush()
 
 
 class ParameterSetRepository:
@@ -465,6 +572,7 @@ class BacktestRepository:
         parameter_set_id: uuid.UUID,
         dataset: Dataset,
         initial_balance: float,
+        metadata: dict[str, Any] | None = None,
     ) -> BacktestRun:
         run = BacktestRun(
             strategy_version_id=strategy_version_id,
@@ -476,7 +584,7 @@ class BacktestRepository:
             end_time=dataset.end_time,
             initial_balance=decimalize(initial_balance),
             status="running",
-            metadata_={},
+            metadata_=json_safe(metadata or {}),
         )
         self.session.add(run)
         self.session.flush()

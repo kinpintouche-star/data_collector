@@ -1,0 +1,313 @@
+name: github_actions_live_v1
+default_timeframe: M1
+default_collection_mode: daily
+default_poll_interval_minutes: 1440
+default_retention_days: 180
+default_overlap_minutes: 15
+assets:
+  - symbol_code: EURUSD
+    source_name: dukascopy
+    provider: dukascopy_node
+    source_symbol: eurusd
+    provider_symbol: eurusd
+    priority: 10
+    enabled: true
+  - symbol_code: GER40
+    source_name: dukascopy
+    provider: dukascopy_node
+    source_symbol: deuidxeur
+    provider_symbol: deuidxeur
+    priority: 10
+    enabled: true
+  - symbol_code: NAS100
+    source_name: dukascopy
+    provider: dukascopy_node
+    source_symbol: usatechidxusd
+    provider_symbol: usatechidxusd
+    priority: 10
+    enabled: true
+  - symbol_code: BTCUSD
+    source_name: binance
+    provider: coinbase
+    source_symbol: BTCUSDT
+    provider_symbol: BTC-USD
+    fallback_provider: kraken
+    fallback_provider_symbol: XBTUSD
+    priority: 10
+    enabled: true
+  - symbol_code: ETHUSD
+    source_name: binance
+    provider: coinbase
+    source_symbol: ETHUSDT
+    provider_symbol: ETH-USD
+    fallback_provider: kraken
+    fallback_provider_symbol: ETHUSD
+    priority: 10
+    enabled: true
+
+  - symbol_code: GBPUSD
+    source_name: dukascopy
+    provider: dukascopy_node
+    source_symbol: gbpusd
+    provider_symbol: gbpusd
+    priority: 20
+    enabled: true
+  - symbol_code: USDJPY
+    source_name: dukascopy
+    provider: dukascopy_node
+    source_symbol: usdjpy
+    provider_symbol: usdjpy
+    priority: 20
+    enabled: true
+  - symbol_code: USDCHF
+    source_name: dukascopy
+    provider: dukascopy_node
+    source_symbol: usdchf
+    provider_symbol: usdchf
+    priority: 20
+    enabled: true
+  - symbol_code: USDCAD
+    source_name: dukascopy
+    provider: dukascopy_node
+    source_symbol: usdcad
+    provider_symbol: usdcad
+    priority: 20
+    enabled: true
+  - symbol_code: AUDUSD
+    source_name: dukascopy
+    provider: dukascopy_node
+    source_symbol: audusd
+    provider_symbol: audusd
+    priority: 20
+    enabled: true
+  - symbol_code: NZDUSD
+    source_name: dukascopy
+    provider: dukascopy_node
+    source_symbol: nzdusd
+    provider_symbol: nzdusd
+    priority: 20
+    enabled: true
+  - symbol_code: EURGBP
+    source_name: dukascopy
+    provider: dukascopy_node
+    source_symbol: eurgbp
+    provider_symbol: eurgbp
+    priority: 20
+    enabled: true
+  - symbol_code: EURJPY
+    source_name: dukascopy
+    provider: dukascopy_node
+    source_symbol: eurjpy
+    provider_symbol: eurjpy
+    priority: 20
+    enabled: true
+  - symbol_code: GBPJPY
+    source_name: dukascopy
+    provider: dukascopy_node
+    source_symbol: gbpjpy
+    provider_symbol: gbpjpy
+    priority: 20
+    enabled: true
+  - symbol_code: AUDJPY
+    source_name: dukascopy
+    provider: dukascopy_node
+    source_symbol: audjpy
+    provider_symbol: audjpy
+    priority: 20
+    enabled: true
+  - symbol_code: CADJPY
+    source_name: dukascopy
+    provider: dukascopy_node
+    source_symbol: cadjpy
+    provider_symbol: cadjpy
+    priority: 20
+    enabled: true
+  - symbol_code: CHFJPY
+    source_name: dukascopy
+    provider: dukascopy_node
+    source_symbol: chfjpy
+    provider_symbol: chfjpy
+    priority: 20
+    enabled: true
+  - symbol_code: EURCHF
+    source_name: dukascopy
+    provider: dukascopy_node
+    source_symbol: eurchf
+    provider_symbol: eurchf
+    priority: 20
+    enabled: true
+  - symbol_code: EURAUD
+    source_name: dukascopy
+    provider: dukascopy_node
+    source_symbol: euraud
+    provider_symbol: euraud
+    priority: 20
+    enabled: true
+  - symbol_code: EURNZD
+    source_name: dukascopy
+    provider: dukascopy_node
+    source_symbol: eurnzd
+    provider_symbol: eurnzd
+    priority: 20
+    enabled: true
+  - symbol_code: GBPAUD
+    source_name: dukascopy
+    provider: dukascopy_node
+    source_symbol: gbpaud
+    provider_symbol: gbpaud
+    priority: 20
+    enabled: true
+  - symbol_code: GBPNZD
+    source_name: dukascopy
+    provider: dukascopy_node
+    source_symbol: gbpnzd
+    provider_symbol: gbpnzd
+    priority: 20
+    enabled: true
+  - symbol_code: AUDNZD
+    source_name: dukascopy
+    provider: dukascopy_node
+    source_symbol: audnzd
+    provider_symbol: audnzd
+    priority: 20
+    enabled: true
+  - symbol_code: EURCAD
+    source_name: dukascopy
+    provider: dukascopy_node
+    source_symbol: eurcad
+    provider_symbol: eurcad
+    priority: 20
+    enabled: true
+  - symbol_code: XAGUSD
+    source_name: dukascopy
+    provider: dukascopy_node
+    source_symbol: xagusd
+    provider_symbol: xagusd
+    priority: 30
+    enabled: true
+
+  - symbol_code: BNBUSD
+    source_name: binance
+    provider: coinbase
+    source_symbol: BNBUSDT
+    provider_symbol: BNB-USD
+    fallback_provider: kraken
+    fallback_provider_symbol: BNBUSD
+    priority: 30
+    enabled: true
+  - symbol_code: SOLUSD
+    source_name: binance
+    provider: coinbase
+    source_symbol: SOLUSDT
+    provider_symbol: SOL-USD
+    fallback_provider: kraken
+    fallback_provider_symbol: SOLUSD
+    priority: 30
+    enabled: true
+  - symbol_code: XRPUSD
+    source_name: binance
+    provider: coinbase
+    source_symbol: XRPUSDT
+    provider_symbol: XRP-USD
+    fallback_provider: kraken
+    fallback_provider_symbol: XRPUSD
+    priority: 30
+    enabled: true
+  - symbol_code: ADAUSD
+    source_name: binance
+    provider: coinbase
+    source_symbol: ADAUSDT
+    provider_symbol: ADA-USD
+    fallback_provider: kraken
+    fallback_provider_symbol: ADAUSD
+    priority: 30
+    enabled: true
+  - symbol_code: DOGEUSD
+    source_name: binance
+    provider: coinbase
+    source_symbol: DOGEUSDT
+    provider_symbol: DOGE-USD
+    fallback_provider: kraken
+    fallback_provider_symbol: DOGEUSD
+    priority: 30
+    enabled: true
+  - symbol_code: AVAXUSD
+    source_name: binance
+    provider: coinbase
+    source_symbol: AVAXUSDT
+    provider_symbol: AVAX-USD
+    fallback_provider: kraken
+    fallback_provider_symbol: AVAXUSD
+    priority: 30
+    enabled: true
+  - symbol_code: LINKUSD
+    source_name: binance
+    provider: coinbase
+    source_symbol: LINKUSDT
+    provider_symbol: LINK-USD
+    fallback_provider: kraken
+    fallback_provider_symbol: LINKUSD
+    priority: 30
+    enabled: true
+
+  - symbol_code: MNQ
+    source_name: databento_glbx
+    provider: databento
+    source_symbol: MNQ.c.0
+    provider_symbol: MNQ.c.0
+    dataset: GLBX.MDP3
+    schema: ohlcv-1m
+    max_cost_usd: 1.0
+    priority: 40
+    enabled: false
+    collection_mode: manual_paid_databento
+
+  - symbol_code: XAUUSD
+    source_name: mt5
+    provider: pending_cloud_source
+    source_symbol: XAUUSD
+    priority: 90
+    enabled: false
+    collection_mode: pending_cloud_source
+  - symbol_code: SPX500
+    source_name: mt5
+    provider: pending_cloud_source
+    source_symbol: US500
+    priority: 90
+    enabled: false
+    collection_mode: pending_cloud_source
+  - symbol_code: US30
+    source_name: mt5
+    provider: pending_cloud_source
+    source_symbol: US30
+    priority: 90
+    enabled: false
+    collection_mode: pending_cloud_source
+  - symbol_code: UK100
+    source_name: mt5
+    provider: pending_cloud_source
+    source_symbol: UK100
+    priority: 90
+    enabled: false
+    collection_mode: pending_cloud_source
+  - symbol_code: FRA40
+    source_name: mt5
+    provider: pending_cloud_source
+    source_symbol: FRA40
+    priority: 90
+    enabled: false
+    collection_mode: pending_cloud_source
+  - symbol_code: EU50
+    source_name: mt5
+    provider: pending_cloud_source
+    source_symbol: EUSTX50
+    priority: 90
+    enabled: false
+    collection_mode: pending_cloud_source
+  - symbol_code: JPN225
+    source_name: mt5
+    provider: pending_cloud_source
+    source_symbol: JPN225
+    priority: 90
+    enabled: false
+    collection_mode: pending_cloud_source

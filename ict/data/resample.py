@@ -7,8 +7,11 @@ from ict.data.candles import normalize_candles
 
 PANDAS_RULES = {
     "M1": "1min",
+    "M5": "5min",
     "M15": "15min",
+    "M30": "30min",
     "H1": "1h",
+    "H4": "4h",
     "D1": "1D",
 }
 
@@ -38,5 +41,8 @@ def resample_ohlcv(candles: pd.DataFrame, timeframe: str) -> pd.DataFrame:
     return aggregated.reset_index()
 
 
-def build_timeframes(m1_candles: pd.DataFrame, timeframes: tuple[str, ...] = ("M15", "H1")) -> dict[str, pd.DataFrame]:
+def build_timeframes(
+    m1_candles: pd.DataFrame,
+    timeframes: tuple[str, ...] = ("M15", "H1"),
+) -> dict[str, pd.DataFrame]:
     return {timeframe: resample_ohlcv(m1_candles, timeframe) for timeframe in timeframes}

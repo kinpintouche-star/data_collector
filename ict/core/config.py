@@ -25,6 +25,12 @@ if BaseSettings is not None:
         mt5_login: Optional[int] = Field(default=None, alias="MT5_LOGIN")  # type: ignore[misc]
         mt5_password: Optional[str] = Field(default=None, alias="MT5_PASSWORD")  # type: ignore[misc]
         mt5_server: Optional[str] = Field(default=None, alias="MT5_SERVER")  # type: ignore[misc]
+        databento_api_key: Optional[str] = Field(default=None, alias="DATABENTO_API_KEY")  # type: ignore[misc]
+        live_remote_database_url: Optional[str] = Field(default=None, alias="LIVE_REMOTE_DATABASE_URL")  # type: ignore[misc]
+        oanda_api_token: Optional[str] = Field(default=None, alias="OANDA_API_TOKEN")  # type: ignore[misc]
+        oanda_account_id: Optional[str] = Field(default=None, alias="OANDA_ACCOUNT_ID")  # type: ignore[misc]
+        oanda_env: str = Field(default="practice", alias="OANDA_ENV")  # type: ignore[misc]
+        oanda_api_url: Optional[str] = Field(default=None, alias="OANDA_API_URL")  # type: ignore[misc]
 
         model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
@@ -37,6 +43,12 @@ else:
         mt5_login: Optional[int] = int(os.environ["MT5_LOGIN"]) if os.getenv("MT5_LOGIN") else None
         mt5_password: Optional[str] = os.getenv("MT5_PASSWORD")
         mt5_server: Optional[str] = os.getenv("MT5_SERVER")
+        databento_api_key: Optional[str] = os.getenv("DATABENTO_API_KEY")
+        live_remote_database_url: Optional[str] = os.getenv("LIVE_REMOTE_DATABASE_URL")
+        oanda_api_token: Optional[str] = os.getenv("OANDA_API_TOKEN")
+        oanda_account_id: Optional[str] = os.getenv("OANDA_ACCOUNT_ID")
+        oanda_env: str = os.getenv("OANDA_ENV", "practice")
+        oanda_api_url: Optional[str] = os.getenv("OANDA_API_URL")
 
 
 @lru_cache(maxsize=1)
