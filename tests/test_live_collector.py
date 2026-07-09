@@ -3,10 +3,12 @@ from __future__ import annotations
 from contextlib import contextmanager
 from datetime import datetime, timezone
 import json
+from pathlib import Path
 from types import SimpleNamespace
 from uuid import UUID
 
 import pandas as pd
+import yaml
 
 from ict.dashboard.data import DASHBOARD_QUERIES, PAGES
 from ict.live.config import load_live_sources
@@ -41,6 +43,28 @@ def test_live_sources_config_defaults_to_daily_six_month_retention() -> None:
         "BTCUSD",
         "ETHUSD",
     }
+    assert all(source.pending_reason for source in sources if source.provider == "pending_cloud_source")
+
+
+def test_universe_assets_are_scheduled_or_explicitly_pending() -> None:
+    universe = yaml.safe_load(open("configs/universe_default_40.yaml", encoding="utf-8"))
+    live_sources = {source.symbol_code: source for source in load_live_sources("configs/live_sources.yaml")}
+
+    for asset in universe["assets"]:
+        symbol = str(asset["symbol"])
+        source = live_sources[symbol]
+        if symbol == "MNQ":
+            assert source.provider == "databento"
+            assert source.collection_mode == "manual_paid_databento"
+            continue
+        assert source.enabled or (source.provider == "pending_cloud_source" and source.pending_reason)
+
+
+def test_github_workflows_do_not_reference_neon() -> None:
+    workflow_text = "\n".join(path.read_text(encoding="utf-8") for path in Path(".github/workflows").glob("*.yml"))
+
+    assert "LIVE_REMOTE_DATABASE_URL" not in workflow_text
+    assert "Neon" not in workflow_text
 
 
 def test_dashboard_exposes_live_collector_page() -> None:

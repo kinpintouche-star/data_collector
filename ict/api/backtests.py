@@ -342,6 +342,7 @@ def _try_restore_archive_for_asset(
             source_names=[asset.source_name],
             timeframe=timeframe.upper(),
             continue_on_missing=True,
+            skip_existing_local=True,
         )
         return result.as_dict()
     except Exception as exc:  # noqa: BLE001 - backtest gap handling remains the source of truth

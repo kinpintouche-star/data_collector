@@ -12,17 +12,17 @@ from pydantic import BaseModel, Field
 from sqlalchemy import Engine, text
 
 from ict.api.review import ReviewNotFoundError, _json_value, _sanitize_mapping
-from ict.archive.store import archive_configured, archive_status, restore_from_r2
+from ict.archive.store import archive_bucket_usage, archive_configured, archive_status, restore_from_r2
 from ict.core.config import get_settings
 from ict.data.ingest import ingest_market_data
 from ict.db.session import build_engine
-from ict.live.sync import sync_remote_candles
+from ict.live.config import load_live_sources
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_UNIVERSE_PATH = PROJECT_ROOT / "configs" / "universe_default_40.yaml"
 
-DataFetchChannel = Literal["auto", "r2", "neon", "databento"]
+DataFetchChannel = Literal["auto", "r2", "databento"]
 
 
 class DataFetchAsset(BaseModel):
@@ -35,7 +35,6 @@ class DataFetchJobRequest(BaseModel):
     assets: list[DataFetchAsset] = Field(min_length=1)
     fallback_days: int = Field(default=180, ge=1, le=3650)
     overlap_minutes: int = Field(default=5, ge=0, le=240)
-    neon_limit: int = Field(default=250000, ge=1000, le=2_000_000)
     max_databento_usd: float = Field(default=5.0, gt=0, le=125.0)
 
 
@@ -165,8 +164,11 @@ def build_data_coverage_rows(engine: Engine | None = None, now: datetime | None 
         return []
     coverage = _read_local_coverage_frame(engine, targets)
     sources = _read_optional_frame(engine, "SELECT name AS source_name, source_type, config FROM data_sources ORDER BY name")
-    live = _read_optional_frame(engine, "SELECT * FROM mart_live_collector ORDER BY symbol_code, source_name")
     r2_status = _r2_status_for_targets(targets)
+    live_config = {
+        (source.symbol_code.upper(), source.source_name): source
+        for source in load_live_sources()
+    }
 
     base = targets.rename(columns={"source_name": "local_source"}).copy()
     if not coverage.empty:
@@ -192,23 +194,15 @@ def build_data_coverage_rows(engine: Engine | None = None, now: datetime | None 
         )
     if not sources.empty:
         base = base.merge(sources.rename(columns={"source_name": "local_source"}), on="local_source", how="left")
-    if not live.empty:
-        live = live.copy()
-        live["neon_last_candle_time"] = pd.to_datetime(live.get("last_candle_time"), errors="coerce", utc=True)
-        live_rollup = (
-            live.groupby("symbol_code", as_index=False)
-            .agg(
-                neon_last_candle_time=("neon_last_candle_time", "max"),
-                neon_enabled=("enabled", "max"),
-                neon_status=("status", lambda values: ", ".join(sorted({str(value) for value in values if pd.notna(value)}))),
-                neon_sources=("source_name", lambda values: ", ".join(sorted({str(value) for value in values if pd.notna(value)}))),
-            )
-        )
-        base = base.merge(live_rollup, on="symbol_code", how="left")
-
     rows = []
     for row in base.to_dict(orient="records"):
         row.update(r2_status.get((str(row.get("symbol_code")).upper(), str(row.get("local_source"))), {}))
+        live_source = live_config.get((str(row.get("symbol_code")).upper(), str(row.get("local_source"))))
+        if live_source is not None:
+            row["provider"] = live_source.provider
+            row["scheduled_enabled"] = live_source.enabled
+            row["collection_mode"] = live_source.collection_mode
+            row["pending_reason"] = live_source.pending_reason
         rows.append(_coverage_row_payload(row, now=now))
     return rows
 
@@ -355,12 +349,22 @@ def fetch_missing_for_row(row: dict[str, Any], request: DataFetchJobRequest, now
             source_names=[str(row["source_name"])],
             timeframe="M1",
             continue_on_missing=True,
+            skip_existing_local=True,
         )
+        if result.rows_read == 0 and result.skipped:
+            return {
+                **_skipped(row, channel, "local_already_covers_r2_partitions"),
+                "rows_read": 0,
+                "until": _iso(end),
+                "skipped_partitions": len(result.skipped),
+                "missing_partitions": len(result.missing),
+            }
         if result.rows_read == 0:
             return {
                 **_skipped(row, channel, "no_r2_data"),
                 "rows_read": 0,
                 "until": _iso(end),
+                "skipped_partitions": len(result.skipped),
                 "missing_partitions": len(result.missing),
             }
         return {
@@ -373,40 +377,11 @@ def fetch_missing_for_row(row: dict[str, Any], request: DataFetchJobRequest, now
             "rows_updated": result.rows_updated,
             "rows_written": result.rows_written,
             "partitions": len(result.partitions),
+            "skipped_partitions": len(result.skipped),
             "missing_partitions": len(result.missing),
         }
 
-    remote_url = get_settings().live_remote_database_url
-    if not remote_url:
-        raise RuntimeError("LIVE_REMOTE_DATABASE_URL is not configured.")
-    local_last = _parse_time(row.get("local_last"))
-    neon_last = _parse_time(row.get("neon_last"))
-    if local_last is not None and neon_last is not None and neon_last <= local_last:
-        return _skipped(row, channel, "local_already_matches_neon")
-    until = neon_last or now or datetime.now(timezone.utc)
-    result = sync_remote_candles(
-        remote_url,
-        since=missing_start(row, request.fallback_days, request.overlap_minutes, now),
-        until=until,
-        symbols=[str(row["symbol_code"])],
-        limit=request.neon_limit,
-    )
-    if result.rows_read == 0:
-        return {
-            **_skipped(row, channel, "no_neon_data"),
-            "rows_read": 0,
-            "until": _iso(until),
-        }
-    return {
-        "symbol_code": row["symbol_code"],
-        "source_name": row["source_name"],
-        "channel": channel,
-        "status": "completed",
-        "rows_read": result.rows_read,
-        "rows_inserted": result.rows_inserted,
-        "rows_updated": result.rows_updated,
-        "rows_written": result.rows_written,
-    }
+    return _skipped(row, channel, "channel_not_supported")
 
 
 def missing_start(row: dict[str, Any], fallback_days: int, overlap_minutes: int, now: datetime | None = None) -> datetime:
@@ -424,12 +399,17 @@ def latest_complete_utc_day(now: datetime | None = None) -> datetime:
     return current.replace(hour=0, minute=0, second=0, microsecond=0)
 
 
-def _data_settings_payload() -> dict[str, bool]:
+def _data_settings_payload() -> dict[str, Any]:
     settings = get_settings()
+    bucket_usage = archive_bucket_usage(
+        max_bytes=int(settings.market_archive_max_bucket_gb * 1024 * 1024 * 1024)
+        if settings.market_archive_max_bucket_gb > 0
+        else None
+    )
     return {
         "r2_configured": archive_configured(),
-        "neon_configured": bool(settings.live_remote_database_url),
         "databento_configured": bool(settings.databento_api_key),
+        "r2_bucket_usage": bucket_usage.as_dict(),
     }
 
 
@@ -437,19 +417,19 @@ def _coverage_row_payload(row: dict[str, Any], now: datetime | None = None) -> d
     current_midnight = latest_complete_utc_day(now)
     complete_day_threshold = current_midnight - timedelta(minutes=1)
     local_last = _parse_time(row.get("last_candle_time"))
-    neon_last = _parse_time(row.get("neon_last_candle_time"))
     rows = int(row.get("candle_rows") or 0)
     complete_day_ok = bool(local_last and local_last >= complete_day_threshold)
     today_present = bool(local_last and local_last >= current_midnight)
-    missing_from_neon = None
-    if local_last and neon_last:
-        missing_from_neon = max(0.0, (neon_last - local_last).total_seconds() / 60)
     status = "empty" if rows == 0 else "complete_day_ok" if complete_day_ok else "stale"
     return {
         "symbol_code": row.get("symbol_code"),
         "group": row.get("group"),
         "source_name": row.get("local_source"),
         "source_type": row.get("source_type"),
+        "provider": row.get("provider"),
+        "scheduled_enabled": bool(row.get("scheduled_enabled") or False),
+        "collection_mode": row.get("collection_mode"),
+        "pending_reason": row.get("pending_reason"),
         "asset_type": row.get("asset_type"),
         "recommended_channel": resolve_channel({"source_type": row.get("source_type")}, "auto"),
         "candle_rows": rows,
@@ -457,22 +437,17 @@ def _coverage_row_payload(row: dict[str, Any], now: datetime | None = None) -> d
         "last_candle_time": _iso(local_last),
         "last_ingested_at": _iso(row.get("last_ingested_at")),
         "local_last": _iso(local_last),
-        "neon_last": _iso(neon_last),
         "r2_available": bool(row.get("r2_available") or False),
         "r2_last": row.get("r2_last"),
         "r2_partitions": int(row.get("r2_partitions") or 0),
         "r2_rows": int(row.get("r2_rows") or 0),
         "r2_encrypted_bytes": int(row.get("r2_encrypted_bytes") or 0),
-        "neon_enabled": bool(row.get("neon_enabled") or False),
-        "neon_status": row.get("neon_status"),
-        "neon_sources": row.get("neon_sources"),
-        "missing_from_neon_min": missing_from_neon,
         "flagged_candles": int(row.get("flagged_candles") or 0),
         "sample_source_symbol": row.get("sample_source_symbol"),
         "complete_day_ok": complete_day_ok,
         "today_present": today_present,
         "freshness_status": status,
-        "needs_attention": status != "complete_day_ok" or bool(missing_from_neon and missing_from_neon > 0),
+        "needs_attention": status != "complete_day_ok",
     }
 
 
@@ -506,6 +481,8 @@ def _coverage_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "stale": sum(1 for row in rows if row["freshness_status"] == "stale"),
         "total_candles": sum(int(row["candle_rows"] or 0) for row in rows),
         "flagged_candles": sum(int(row["flagged_candles"] or 0) for row in rows),
+        "scheduled_free": sum(1 for row in rows if row["scheduled_enabled"] and row["recommended_channel"] == "R2"),
+        "pending_cloud_source": sum(1 for row in rows if row.get("collection_mode") == "pending_cloud_source"),
     }
 
 
@@ -516,12 +493,6 @@ def _api_usage_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "limits": "Borne par le free tier R2, les limites GitHub Actions, et les garde-fous max upload/download.",
             "current_split": "Restore par partitions journalieres utiles, puis backtest depuis la base locale.",
             "cost": "Free tier target; aucune source payante schedulee.",
-        },
-        "Neon": {
-            "usage": "Fallback/transition SQL recent, plus source principale.",
-            "limits": "Bound by Neon free storage/compute and row limit.",
-            "current_split": "Pull missing recent candles if R2 is not available yet.",
-            "cost": "Free tier target.",
         },
         "Databento": {
             "usage": "Manual native paid market data for assets not covered cleanly for free, especially MNQ.",
@@ -555,8 +526,6 @@ def _channel_is_applicable(row: dict[str, Any], channel: str) -> bool:
     source_type = str(row.get("source_type") or "").lower()
     if channel == "Databento":
         return source_type == "databento"
-    if channel == "Neon":
-        return source_type != "databento"
     if channel == "R2":
         return source_type != "databento"
     return False

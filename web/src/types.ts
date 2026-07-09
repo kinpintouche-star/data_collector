@@ -295,30 +295,29 @@ export type BacktestJob = {
   errors: Array<Record<string, unknown>>;
 };
 
-export type DataFetchChannel = "auto" | "r2" | "neon" | "databento";
+export type DataFetchChannel = "auto" | "r2" | "databento";
 
 export type DataCoverageRow = {
   symbol_code: string;
   group: string | null;
   source_name: string;
   source_type: string | null;
+  provider: string | null;
+  scheduled_enabled: boolean;
+  collection_mode: string | null;
+  pending_reason: string | null;
   asset_type: string | null;
-  recommended_channel: "R2" | "Neon" | "Databento";
+  recommended_channel: "R2" | "Databento";
   candle_rows: number;
   first_candle_time: string | null;
   last_candle_time: string | null;
   last_ingested_at: string | null;
   local_last: string | null;
-  neon_last: string | null;
   r2_available: boolean;
   r2_last: string | null;
   r2_partitions: number;
   r2_rows: number;
   r2_encrypted_bytes: number;
-  neon_enabled: boolean;
-  neon_status: string | null;
-  neon_sources: string | null;
-  missing_from_neon_min: number | null;
   flagged_candles: number;
   sample_source_symbol: string | null;
   complete_day_ok: boolean;
@@ -331,8 +330,20 @@ export type DataCoveragePayload = {
   generated_at: string;
   settings: {
     r2_configured: boolean;
-    neon_configured: boolean;
     databento_configured: boolean;
+    r2_bucket_usage: {
+      bucket: string;
+      prefix: string;
+      object_count: number;
+      total_bytes: number;
+      total_gb: number;
+      max_bytes: number | null;
+      max_gb: number | null;
+      remaining_bytes: number | null;
+      remaining_gb: number | null;
+      usage_ratio: number | null;
+      over_limit: boolean;
+    };
   };
   summary: {
     assets: number;
@@ -343,6 +354,8 @@ export type DataCoveragePayload = {
     stale: number;
     total_candles: number;
     flagged_candles: number;
+    scheduled_free: number;
+    pending_cloud_source: number;
   };
   rows: DataCoverageRow[];
 };
@@ -384,7 +397,6 @@ export type DataFetchPayload = {
   assets: Array<{ symbol_code: string; source_name: string }>;
   fallback_days: number;
   overlap_minutes: number;
-  neon_limit: number;
   max_databento_usd: number;
 };
 

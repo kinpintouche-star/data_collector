@@ -143,11 +143,15 @@ Decision 2026-07-08: Oracle/VM Docker n'est pas retenu car l'essai Always Free i
 
 Ajout des commandes `ict live storage` et `ict live prune-remote`. Mesure reelle du 2026-07-08: 2 264 673 candles crypto occupent environ 472.8 MB dans `live_market_candles`, proche du quota Neon Free. La retention Neon cible passe donc a 30 jours; le prune est manuel, en dry-run par defaut, et verifie que les candles candidates existent deja dans la base locale avant suppression.
 
+### Pivot R2 sans base remote SQL
+
+Decision 2026-07-09: Neon sort du chemin operationnel. Le pipeline officiel devient `providers gratuits -> GitHub Actions -> R2 archive chiffree -> PC cache -> Postgres local -> backtests`. Les workflows GitHub Actions SQL remote sont retires, le helper de secrets ne configure plus de base remote, la page Data React ne propose plus que R2 pour les actifs gratuits et Databento en manuel pour MNQ. Les anciennes decisions Neon restent dans cet historique uniquement.
+
 ## Jalons A Venir
 
 ### Extension live vers 40 actifs
 
-Etendre la couverture remote au-dela des cryptos via sources gratuites ou Databento cible, puis valider la collecte journaliere vers Neon et la synchronisation locale.
+Etendre la couverture remote au-dela des 32 actifs gratuits scheduled en testant les 7 `pending_cloud_source` sur des alias Dukascopy ou d'autres sources gratuites R2-compatibles. MNQ reste Databento manuel.
 
 ### Interface strategie parametrable
 

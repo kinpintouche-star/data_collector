@@ -1,16 +1,16 @@
 # Etat Courant - ICT Backtesting Platform
 
-Derniere mise a jour: 2026-07-08
+Derniere mise a jour: 2026-07-09
 
 ## Position Actuelle
 
 Priorite de reference: le projet principal est de creer un environnement fiable pour tester des strategies en backtest.
 
-Le projet a une base locale canonique, une interface React/FastAPI principale, des providers historiques, un collecteur GitHub Actions, et une protection backtest contre les trous de candles. La vision data remote change maintenant: R2 devient l'archive officielle gratuite cible; Neon passe en transition/fallback recent.
+Le projet a une base locale canonique, une interface React/FastAPI principale, des providers historiques, un collecteur GitHub Actions, une archive R2 chiffree et une protection backtest contre les trous de candles. Le chemin remote gratuit officiel est maintenant R2 direct.
 
 Le point ouvert principal est la couverture live/gratuite des actifs non-crypto au-dela de Dukascopy. Les cryptos fonctionnent deja en live/batch via sources publiques. OANDA est retire du pipeline operationnel car le parcours compte demande un depot.
 
-La page `Data` React/FastAPI pilote les donnees: couverture locale par actif/source, informations d'usage API, dernier candle Neon, fetch simplifie par canal `Neon` ou `Databento`, selection multi-actifs et jobs de fetch non bloquants. Streamlit garde temporairement l'ancien `Data Management` comme fallback.
+La page `Data` React/FastAPI pilote les donnees: couverture locale/R2 par actif-source, informations d'usage API, restore R2 par selection multi-actifs, Databento manuel, et jobs non bloquants. Streamlit garde temporairement l'ancien `Data Management` comme fallback legacy.
 
 Nouveau jalon UI: le cockpit `React Trading Lab` est ajoute en parallele de Streamlit. Il cible la review d'un trade avec charts H4, H1, M30, M15, M5, M1, events de setup, fibo automatique, entree/sortie, SL/TP et alertes de gaps. Le mode par defaut est maintenant un seul graphe avec selection de timeframe, avec une grille 6 timeframes disponible en option.
 
@@ -22,11 +22,11 @@ Nouveau jalon Run Lab: l'app React/FastAPI permet de preparer un backtest depuis
 
 Nouveau jalon orchestration locale: lancement simplifie via Docker Compose avec services `postgres`, `api`, `web` et `adminer`, plus `Makefile` et `scripts/dev.ps1` pour demarrer, voir les logs et afficher les URLs utiles. Le collecteur live n'est pas dans ce compose local, car il doit continuer de tourner quand le PC est eteint.
 
-Nouveau jalon data remote: Oracle/VM Docker/Cloudflare restent legacy. Le chemin cible devient GitHub Actions -> R2 archive chiffree pour les sources gratuites. Neon n'est plus le chemin principal; il reste seulement transition/fallback recent tant que la migration R2 n'est pas terminee.
+Nouveau jalon data remote: Oracle/VM Docker/Cloudflare restent legacy. Le chemin operationnel devient GitHub Actions -> R2 archive chiffree pour les sources gratuites. Databento reste manuel et payant uniquement.
 
 Nouveau guide: `docs/R2_ARCHIVE_GUIDE.md` fixe l'objectif actuel, ce qui doit etre modifie et ce qui est nouveau.
 
-Nouveau jalon documentation architecture: ajout d'un schema diagrams.net versionne dans `docs/ARCHITECTURE_CURRENT.drawio` et d'une note `docs/ARCHITECTURE.md`. Le schema decrit les containers, ports, roles, flux locaux, flux Neon/GitHub Actions/providers, et doit etre mis a jour quand l'architecture change.
+Nouveau jalon documentation architecture: ajout d'un schema diagrams.net versionne dans `docs/ARCHITECTURE_CURRENT.drawio` et d'une note `docs/ARCHITECTURE.md`. Le schema decrit les containers, ports, roles, flux locaux, flux R2/GitHub Actions/providers, et doit etre mis a jour quand l'architecture change.
 
 Nouveau jalon recherche strategie: ajout de `docs/STRATEGY_ANALYSIS_PLAYBOOK.md`, un cadre pour transformer les idees de strategie en hypotheses testables. Il formalise les pistes TP vers liquidite proche, SL structurel sous OTE/FVG/OB, alignement H1/M15/M1, double consolidation OB/FVG et RR minimum, avec garde-fous contre le future leakage.
 
@@ -55,21 +55,19 @@ Audit local 180 jours:
 En place:
 
 - Tables de monitoring collector.
-- Sync Neon -> local depuis l'interface.
-- Sync remote -> local via CLI.
-- Sync local -> remote pour seed/retention.
-- GitHub Actions daily doit devenir le flux officiel vers R2, sans passage obligatoire par Neon.
+- GitHub Actions daily archive directement les sources gratuites vers R2.
+- Restore R2 -> local depuis l'interface et via CLI.
+- Cache local des fichiers chiffres dans `MARKET_ARCHIVE_CACHE_DIR`.
 - GitHub Actions priority free-safe reste possible plus tard, mais toujours sans Databento automatique.
 - Docker remote collector, Oracle VM et Cloudflare Worker conserves en legacy, hors chemin operationnel.
 - Logs JSONL et resume GitHub Actions par run.
-- Page React `Data` a faire evoluer vers restore R2 par defaut, Neon en fallback, Databento uniquement en manuel.
+- Page React `Data`: restore R2 par defaut, Databento uniquement en manuel.
 - Section `API Usage` dans `Data`: limites pratiques, decoupage courant, cout/garde-fou, actifs concernes par canal.
-- Commandes Neon conservees pour transition, mais l'objectif est de ne plus dependre de Neon pour stocker les candles gratuites.
 
 Limite actuelle:
 
 - `configs/live_sources.yaml` couvre les 40 actifs: 32 cloud-compatibles gratuits enabled, MNQ/Databento en manuel payant, 7 MT5-only en `pending_cloud_source`.
-- Les actifs cloud enabled etaient collectes vers Neon via Coinbase/Kraken ou Dukascopy-node. Ce flux doit etre remplace par R2 direct. Databento n'est jamais lance par le scheduler.
+- Les actifs cloud enabled sont archives vers R2 via Coinbase/Kraken ou Dukascopy-node. Databento n'est jamais lance par le scheduler.
 - Les actifs pending restent rattrapes localement via MT5/Data Management tant qu'une source cloud gratuite fiable n'est pas trouvee.
 
 ## Decision MNQ
@@ -90,7 +88,7 @@ Decision 2026-07-07: utiliser Databento pour MNQ tant que les credits disponible
 ## Canaux De Fetch Data Management
 
 - `R2`: canal cible par defaut pour tous les actifs gratuits; restore depuis l'archive chiffree vers la base locale canonique.
-- `Neon`: canal de transition/fallback recent, plus canal principal.
+- `R2`: canal gratuit par defaut pour tous les actifs gratuits; restaure depuis l'archive chiffree vers la base locale canonique.
 - `Databento`: canal manuel pour `source_type=databento`, principalement MNQ; garde-fou `Max Databento USD` avant telechargement. Reference MNQ M1 2026-01-01 -> 2026-07-01: environ 0.6363 USD.
 
 ## OANDA
@@ -100,7 +98,7 @@ Decision 2026-07-07: OANDA est retire du pipeline operationnel. La source est ga
 ## Questions Ouvertes
 
 - Pour MNQ, garde-t-on Databento tant que les credits existent, ou ajoute-t-on un proxy NAS100 separe pour les tests gratuits ?
-- Ajouter une archive remote gratuite compressee type R2/Parquet ou une strategie multi-projets Neon si l'on veut vraiment 180 jours remote pour tout l'univers.
+- Surveiller l'usage R2 pour rester sous 10 GB et ajuster retention/partitionnement si l'univers s'etend.
 - Quelles pages Streamlit doivent etre migrees en priorite dans React apres la review trade et les analytics de strategie ?
 - Quels diagnostics strategie doivent devenir des analyses avancees ou un modele ML quand le volume de trades sera suffisant ?
 - Ajouter une configuration explicite de tick size par symbole dans `configs/symbols.yaml` pour remplacer les fallbacks de securite.

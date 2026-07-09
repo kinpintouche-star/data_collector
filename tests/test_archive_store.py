@@ -113,6 +113,75 @@ def test_archive_restore_rejects_wrong_manifest_format(tmp_path) -> None:
         raise AssertionError("restore_from_r2 should reject an unknown data_format")
 
 
+def test_archive_restore_uses_cached_encrypted_payload(tmp_path, monkeypatch) -> None:
+    key = b"3" * 32
+
+    class CountingStore(archive_store.LocalObjectStore):
+        def __init__(self, root):
+            super().__init__(root)
+            self.reads: dict[str, int] = {}
+
+        def get_bytes(self, object_key: str) -> bytes:
+            self.reads[object_key] = self.reads.get(object_key, 0) + 1
+            return super().get_bytes(object_key)
+
+    object_store = CountingStore(tmp_path / "objects")
+    partition = archive_store.export_frame_to_store(_frame(), object_store, key)[0]
+    monkeypatch.setattr(
+        archive_store,
+        "upsert_remote_frame",
+        lambda frame: archive_store.LiveSyncResult(len(frame), len(frame), len(frame), 0, []),
+    )
+
+    kwargs = {
+        "since": datetime(2026, 7, 1, tzinfo=timezone.utc),
+        "until": datetime(2026, 7, 2, tzinfo=timezone.utc),
+        "symbols": ["BTCUSD"],
+        "source_names": ["binance"],
+        "store": object_store,
+        "archive_key": key,
+        "cache_dir": tmp_path / "cache",
+    }
+    first = archive_store.restore_from_r2(**kwargs)
+    second = archive_store.restore_from_r2(**kwargs)
+
+    assert first.partitions[0]["cache_hit"] is False
+    assert second.partitions[0]["cache_hit"] is True
+    assert object_store.reads[partition.object_key] == 1
+
+
+def test_archive_restore_skips_local_partition_before_payload_download(tmp_path, monkeypatch) -> None:
+    key = b"4" * 32
+
+    class CountingStore(archive_store.LocalObjectStore):
+        def __init__(self, root):
+            super().__init__(root)
+            self.reads: dict[str, int] = {}
+
+        def get_bytes(self, object_key: str) -> bytes:
+            self.reads[object_key] = self.reads.get(object_key, 0) + 1
+            return super().get_bytes(object_key)
+
+    object_store = CountingStore(tmp_path / "objects")
+    partition = archive_store.export_frame_to_store(_frame(), object_store, key)[0]
+    monkeypatch.setattr(archive_store, "_local_partition_satisfies_manifest", lambda manifest: True)
+
+    result = archive_store.restore_from_r2(
+        since=datetime(2026, 7, 1, tzinfo=timezone.utc),
+        until=datetime(2026, 7, 2, tzinfo=timezone.utc),
+        symbols=["BTCUSD"],
+        source_names=["binance"],
+        store=object_store,
+        archive_key=key,
+        skip_existing_local=True,
+    )
+
+    assert result.status == "completed"
+    assert result.rows_read == 0
+    assert result.skipped[0]["reason"] == "local_already_covers_partition"
+    assert object_store.reads.get(partition.object_key, 0) == 0
+
+
 def test_archive_key_helper_requires_32_bytes(monkeypatch) -> None:
     class Settings:
         market_archive_key = base64.b64encode(b"x" * 32).decode("ascii")

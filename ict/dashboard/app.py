@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -15,12 +14,12 @@ import streamlit as st
 import yaml
 from sqlalchemy import text
 
+from ict.archive.store import archive_configured, restore_from_r2
 from ict.core.config import get_settings
 from ict.data.ingest import ingest_market_data
 from ict.dashboard.data import DASHBOARD_QUERIES, PAGES, dashboard_frame
 from ict.db.session import build_engine
 from ict.live.config import load_live_sources
-from ict.live.sync import sync_remote_candles
 
 
 ALL_BOTS = "All bots"
@@ -52,10 +51,6 @@ def read_sql(query: str) -> pd.DataFrame:
 @st.cache_data(ttl=30)
 def read_sql_params(query: str, params: dict) -> pd.DataFrame:
     return dashboard_frame(pd.read_sql(text(query), dashboard_engine(), params=params))
-
-
-def live_remote_database_url() -> str | None:
-    return os.getenv("LIVE_REMOTE_DATABASE_URL") or get_settings().live_remote_database_url
 
 
 def apply_theme() -> None:
@@ -770,7 +765,6 @@ def _source_config_value(value) -> dict:
 def _build_data_management_table(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
     targets = load_universe_targets()
     coverage = data.get("Coverage", pd.DataFrame()).copy()
-    live = data.get("Live Collector", pd.DataFrame()).copy()
     sources = data.get("Data Sources", pd.DataFrame()).copy()
 
     if targets.empty:
@@ -808,44 +802,20 @@ def _build_data_management_table(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
         source_meta = sources.rename(columns={"source_name": "local_source"})
         base = base.merge(source_meta, on="local_source", how="left")
 
-    if not live.empty:
-        live = live.copy()
-        live["neon_last_candle_time"] = pd.to_datetime(live["last_candle_time"], errors="coerce", utc=True)
-        live_rollup = (
-            live.groupby("symbol_code", as_index=False)
-            .agg(
-                neon_last_candle_time=("neon_last_candle_time", "max"),
-                neon_enabled=("enabled", "max"),
-                neon_status=("status", lambda values: ", ".join(sorted({str(value) for value in values if pd.notna(value)}))),
-                neon_sources=("source_name", lambda values: ", ".join(sorted({str(value) for value in values if pd.notna(value)}))),
-            )
-        )
-        base = base.merge(live_rollup, on="symbol_code", how="left")
-
     if "source_type" not in base:
         base["source_type"] = None
-    if "neon_enabled" not in base:
-        base["neon_enabled"] = False
-    if "neon_status" not in base:
-        base["neon_status"] = None
-    if "neon_last_candle_time" not in base:
-        base["neon_last_candle_time"] = pd.NaT
 
     base["candle_rows"] = pd.to_numeric(base["candle_rows"], errors="coerce").fillna(0).astype(int)
     base["flagged_candles"] = pd.to_numeric(base["flagged_candles"], errors="coerce").fillna(0).astype(int)
     base["local_last"] = pd.to_datetime(base["last_candle_time"], errors="coerce", utc=True)
-    base["neon_last"] = pd.to_datetime(base["neon_last_candle_time"], errors="coerce", utc=True)
     first_candle = pd.to_datetime(base["first_candle_time"], errors="coerce", utc=True)
     base["days_local"] = (
         (base["local_last"] - first_candle).dt.total_seconds()
         / 86400
     )
-    base["missing_from_neon_min"] = (
-        (base["neon_last"] - base["local_last"]).dt.total_seconds() / 60
-    ).where(base["neon_last"].notna() & base["local_last"].notna())
     base["fetch_channel"] = base.apply(_fetch_channel, axis=1)
     base["fetch_action"] = base.apply(_fetch_label, axis=1)
-    base["needs_attention"] = (base["candle_rows"] == 0) | (base["missing_from_neon_min"].fillna(0) > 0)
+    base["needs_attention"] = base["candle_rows"] == 0
     return base.sort_values(["needs_attention", "group", "symbol_code", "local_source"], ascending=[False, True, True, True])
 
 
@@ -872,11 +842,9 @@ def _missing_start(row: pd.Series, fallback_days: int, overlap_minutes: int) -> 
 
 def _fetch_channel(row: pd.Series) -> str:
     source_type = str(row.get("source_type") or "").lower()
-    if source_type == "dukascopy":
-        return "Dukascopy"
     if source_type == "databento":
         return "Databento"
-    return "Neon"
+    return "R2"
 
 
 def _fetch_label(row: pd.Series) -> str:
@@ -966,10 +934,7 @@ def _fetch_missing_for_row(
     row: pd.Series,
     fallback_days: int,
     overlap_minutes: int,
-    neon_limit: int,
     max_cost: float,
-    dukascopy_retries: int,
-    remote_url: str | None,
     now: datetime | None = None,
 ) -> dict:
     symbol_code = str(row["symbol_code"])
@@ -977,10 +942,6 @@ def _fetch_missing_for_row(
     channel = _fetch_channel(row)
     start = _missing_start(row, fallback_days, overlap_minutes)
     now_until = now or datetime.now(timezone.utc)
-
-    if channel == "Dukascopy":
-        until = _latest_complete_utc_day(now_until)
-        return _run_dukascopy_node_fetch(symbol_code, local_source, start, until, dukascopy_retries)
 
     if channel == "Databento":
         result = ingest_market_data(
@@ -1003,25 +964,29 @@ def _fetch_missing_for_row(
             "rows_written": result["rows_written"],
         }
 
-    if not remote_url:
-        raise RuntimeError("LIVE_REMOTE_DATABASE_URL is not configured.")
-    neon_until = _utc_timestamp(row.get("neon_last"))
-    result = sync_remote_candles(
-        remote_url,
+    if not archive_configured():
+        raise RuntimeError("R2 archive is not configured.")
+    result = restore_from_r2(
         since=start,
-        until=neon_until,
+        until=_latest_complete_utc_day(now_until),
         symbols=[symbol_code],
-        limit=neon_limit,
+        source_names=[local_source],
+        timeframe="M1",
+        continue_on_missing=True,
+        skip_existing_local=True,
     )
     return {
         "symbol_code": symbol_code,
         "source_name": local_source,
-        "channel": "Neon",
+        "channel": "R2",
         "status": "completed",
         "rows_read": result.rows_read,
         "rows_inserted": result.rows_inserted,
         "rows_updated": result.rows_updated,
         "rows_written": result.rows_written,
+        "partitions": len(result.partitions),
+        "skipped_partitions": len(result.skipped),
+        "missing_partitions": len(result.missing),
     }
 
 
@@ -1038,16 +1003,10 @@ def _api_usage_rows(table: pd.DataFrame) -> pd.DataFrame:
         .sort_values("fetch_channel")
     )
     info = {
-        "Dukascopy": {
-            "usage": "Historical M1 backfill for forex and selected CFD indices.",
-            "limits": "No hard public quota found; our rule is monthly/day-file batches, existing-file cache, retries, and no parallel blast from the UI.",
-            "current_split": "One selected asset per action; each request delegates to dukascopy-node, which downloads daily artifacts in small batches.",
-            "cost": "Free.",
-        },
-        "Neon": {
-            "usage": "Remote warehouse/buffer, then local canonical DB sync.",
-            "limits": "Bound by Neon free storage/compute and our row limit control.",
-            "current_split": "Pull missing candles per selected asset with overlap; remote keeps the shared buffer.",
+        "R2": {
+            "usage": "Archive distante gratuite: GitHub Actions stocke les candles en Parquet/ZSTD chiffre, puis le PC restaure localement.",
+            "limits": "Borne par le free tier R2, le budget bucket 10GB et les garde-fous de download/upload.",
+            "current_split": "Restore par partitions journalieres manquantes, avec cache local des fichiers chiffres.",
             "cost": "Free tier target.",
         },
         "Databento": {
@@ -1073,7 +1032,7 @@ def render_api_usage_info(table: pd.DataFrame) -> None:
 def render_data_management(data: dict[str, pd.DataFrame], selection: BotSelection) -> None:
     st.markdown('<div class="bot-title">Data Management</div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="bot-subtitle">Coverage locale, canaux de fetch, rattrapage Neon, Dukascopy et Databento</div>',
+        '<div class="bot-subtitle">Coverage locale, restore R2 et Databento manuel</div>',
         unsafe_allow_html=True,
     )
 
@@ -1086,8 +1045,8 @@ def render_data_management(data: dict[str, pd.DataFrame], selection: BotSelectio
     cols[0].metric("Assets", table["symbol_code"].nunique())
     cols[1].metric("Local Rows", int(table["candle_rows"].sum()))
     cols[2].metric("No Local Data", int((table["candle_rows"] == 0).sum()))
-    cols[3].metric("Dukascopy", int((table["fetch_channel"] == "Dukascopy").sum()))
-    cols[4].metric("Neon", int((table["fetch_channel"] == "Neon").sum()))
+    cols[3].metric("R2", int((table["fetch_channel"] == "R2").sum()))
+    cols[4].metric("Scheduled Free", int((table["fetch_channel"] == "R2").sum()))
     cols[5].metric("Databento", int((table["fetch_channel"] == "Databento").sum()))
 
     view = table.copy()
@@ -1099,10 +1058,6 @@ def render_data_management(data: dict[str, pd.DataFrame], selection: BotSelectio
         "fetch_channel",
         "candle_rows",
         "local_last",
-        "neon_last",
-        "missing_from_neon_min",
-        "neon_enabled",
-        "neon_status",
         "flagged_candles",
     ]
     st.dataframe(view[[column for column in display_columns if column in view.columns]], width="stretch")
@@ -1113,10 +1068,7 @@ def render_data_management(data: dict[str, pd.DataFrame], selection: BotSelectio
     settings_cols = st.columns(5)
     fallback_days = settings_cols[0].number_input("Fallback days", min_value=1, max_value=365, value=180, step=1)
     overlap_minutes = settings_cols[1].number_input("Overlap minutes", min_value=0, max_value=240, value=5, step=1)
-    neon_limit = settings_cols[2].number_input("Neon row limit", min_value=1000, max_value=2_000_000, value=250_000, step=10_000)
-    max_cost = settings_cols[3].number_input("Max Databento USD", min_value=0.01, max_value=125.0, value=5.0, step=0.25)
-    dukascopy_retries = settings_cols[4].number_input("Dukascopy retries", min_value=0, max_value=15, value=3, step=1)
-    remote_url = live_remote_database_url()
+    max_cost = settings_cols[2].number_input("Max Databento USD", min_value=0.01, max_value=125.0, value=5.0, step=0.25)
 
     single_tab, bulk_tab = st.tabs(["Single Asset", "Bulk Fetch"])
     with single_tab:
@@ -1124,7 +1076,7 @@ def render_data_management(data: dict[str, pd.DataFrame], selection: BotSelectio
         if row is not None:
             symbol_code = str(row["symbol_code"])
             channel = _fetch_channel(row)
-            disabled = channel == "Neon" and not remote_url
+            disabled = channel == "R2" and not archive_configured()
             if st.button(f"Fetch Missing ({channel})", disabled=disabled, use_container_width=True):
                 try:
                     with st.spinner(f"Fetching {symbol_code} via {channel}..."):
@@ -1132,10 +1084,7 @@ def render_data_management(data: dict[str, pd.DataFrame], selection: BotSelectio
                             row,
                             int(fallback_days),
                             int(overlap_minutes),
-                            int(neon_limit),
                             float(max_cost),
-                            int(dukascopy_retries),
-                            remote_url,
                         )
                     st.success(f"{symbol_code} fetched via {channel}.")
                     st.json(result)
@@ -1143,9 +1092,7 @@ def render_data_management(data: dict[str, pd.DataFrame], selection: BotSelectio
                 except Exception as exc:
                     st.error(str(exc))
             if disabled:
-                st.caption("Neon fetch needs LIVE_REMOTE_DATABASE_URL.")
-            if channel == "Dukascopy":
-                st.caption("Dukascopy fetch targets the latest complete UTC day to avoid unstable partial daily files.")
+                st.caption("R2 restore needs R2_* and MARKET_ARCHIVE_KEY.")
 
     with bulk_tab:
         bulk_key = "data_management_bulk_assets"
@@ -1176,10 +1123,7 @@ def render_data_management(data: dict[str, pd.DataFrame], selection: BotSelectio
                         selected_row,
                         int(fallback_days),
                         int(overlap_minutes),
-                        int(neon_limit),
                         float(max_cost),
-                        int(dukascopy_retries),
-                        remote_url,
                     )
                 except Exception as exc:
                     result = {
@@ -1199,38 +1143,6 @@ def live_symbol_options(live: pd.DataFrame) -> list[str]:
     if not live.empty and "symbol_code" in live:
         return sorted(live["symbol_code"].dropna().astype(str).unique())
     return sorted({source.symbol_code for source in load_live_sources() if source.enabled})
-
-
-def render_live_sync_controls(live: pd.DataFrame) -> None:
-    st.subheader("Neon -> Local")
-    remote_url = live_remote_database_url()
-    symbols = live_symbol_options(live)
-    selected_symbols = st.multiselect("Assets", symbols, default=symbols)
-    left, right = st.columns(2)
-    lookback_days = left.number_input("Lookback Days", min_value=1, max_value=180, value=3, step=1)
-    limit = right.number_input("Row Limit", min_value=1000, max_value=2_000_000, value=250_000, step=10_000)
-
-    if not remote_url:
-        st.warning("LIVE_REMOTE_DATABASE_URL is not configured.")
-    if st.button("Sync Remote Candles", disabled=not remote_url or not selected_symbols):
-        since = datetime.now(timezone.utc) - timedelta(days=int(lookback_days))
-        try:
-            with st.spinner("Syncing remote candles..."):
-                result = sync_remote_candles(
-                    remote_url,
-                    since=since,
-                    symbols=selected_symbols,
-                    limit=int(limit),
-                )
-            st.success(
-                f"{result.rows_written} rows written "
-                f"({result.rows_inserted} inserted, {result.rows_updated} updated)."
-            )
-            if result.groups:
-                st.dataframe(pd.DataFrame.from_records(result.groups), width="stretch")
-            st.cache_data.clear()
-        except Exception as exc:
-            st.error(str(exc))
 
 
 def render_live_collector(data: dict[str, pd.DataFrame], selection: BotSelection) -> None:
@@ -1256,8 +1168,6 @@ def render_live_collector(data: dict[str, pd.DataFrame], selection: BotSelection
     cols[2].metric("Open Incidents", len(open_incidents))
     cols[3].metric("Last Rows", int(last_run["rows_written"]) if last_run is not None else 0)
     cols[4].metric("Last Status", str(last_run["status"]) if last_run is not None else "-")
-
-    render_live_sync_controls(live)
 
     if not open_incidents.empty:
         st.error(f"{len(open_incidents)} live collector incident(s) open.")

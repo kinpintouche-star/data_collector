@@ -1,6 +1,6 @@
 # Guide Archive R2 - Donnees Marche
 
-Derniere mise a jour: 2026-07-08
+Derniere mise a jour: 2026-07-09
 
 ## Objectif Maintenant
 
@@ -10,9 +10,7 @@ Le chemin cible des donnees gratuites devient:
 Providers gratuits -> GitHub Actions -> R2 archive chiffree -> PC local -> Postgres local -> backtests
 ```
 
-Neon n'est plus le coeur du pipeline live. Il peut rester temporairement pour transition, diagnostic ou rattrapage recent, mais le stockage durable gratuit vise maintenant **Cloudflare R2**.
-
-Le but n'est pas de garder 6 mois dans Neon. Le but est d'archiver chaque jour les candles recuperees par GitHub Actions directement dans R2, puis de restaurer localement uniquement les partitions utiles quand on veut lancer un backtest.
+Le pipeline live gratuit ne passe plus par une base remote SQL. GitHub Actions archive chaque jour les candles recuperees directement dans R2, puis le PC restaure localement uniquement les partitions utiles quand on veut lancer un backtest.
 
 Contraintes non negociables:
 
@@ -26,8 +24,7 @@ Contraintes non negociables:
 
 ## Ce Qui Doit Etre Modifie
 
-- Remplacer le chemin officiel `GitHub Actions -> Neon` par `GitHub Actions -> R2`.
-- Ajouter une commande principale de collecte directe:
+- Utiliser la commande principale de collecte directe:
 
 ```powershell
 python -m ict.cli archive collect-to-r2
@@ -50,8 +47,7 @@ python -m ict.cli archive collect-to-r2
 - Faire evoluer la page React `Data`:
   - afficher la couverture locale;
   - afficher la couverture R2;
-  - garder Neon comme bouton secondaire si configure;
-  - ajouter `Restore R2`;
+  - proposer `Restore R2` / `Preparer donnees`;
   - garder `Databento` manuel uniquement.
 
 - Faire evoluer Docker local:
@@ -61,7 +57,7 @@ python -m ict.cli archive collect-to-r2
 
 - Mettre a jour la documentation architecture:
   - R2 devient l'archive remote officielle;
-  - Neon devient legacy/transition;
+  - toute base remote SQL est hors chemin operationnel;
   - le schema draw.io devra montrer ce nouveau flux.
 
 ## Ce Qui Est Nouveau
@@ -175,23 +171,9 @@ Regle importante: si on ajoute une source R2 qui sort du brut, elle doit passer 
   - workflow qui skip si R2 n'est pas configure;
   - aucun cout Databento sans clic manuel dans l'app.
 
-## Statut De Neon
-
-Neon n'est pas supprime du projet immediatement.
-
-Statut cible:
-
-- `legacy/transition`;
-- utile pour verifier l'ancien pipeline;
-- utile comme fallback recent si on veut;
-- pas source principale de stockage;
-- pas archive 6 mois.
-
-Regle simple: si une donnee gratuite peut aller directement dans R2, elle ne doit pas faire un detour obligatoire par Neon.
-
 ## Definition Du Succes
 
-- Un run GitHub Actions quotidien peut archiver les candles gratuites dans R2 sans Neon.
+- Un run GitHub Actions quotidien archive les candles gratuites dans R2.
 - R2 contient des manifests verifies par symbole/source/timeframe/jour.
 - Le PC peut restaurer une periode manquante depuis R2 vers Postgres local.
 - Un backtest utilise la DB locale apres restauration.

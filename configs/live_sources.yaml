@@ -269,6 +269,7 @@ assets:
     priority: 90
     enabled: false
     collection_mode: pending_cloud_source
+    pending_reason: "No validated free cloud M1 provider alias yet; test Dukascopy candidates before enabling."
   - symbol_code: SPX500
     source_name: mt5
     provider: pending_cloud_source
@@ -276,6 +277,7 @@ assets:
     priority: 90
     enabled: false
     collection_mode: pending_cloud_source
+    pending_reason: "No validated free cloud M1 provider alias yet; test Dukascopy candidates before enabling."
   - symbol_code: US30
     source_name: mt5
     provider: pending_cloud_source
@@ -283,6 +285,7 @@ assets:
     priority: 90
     enabled: false
     collection_mode: pending_cloud_source
+    pending_reason: "No validated free cloud M1 provider alias yet; test Dukascopy candidates before enabling."
   - symbol_code: UK100
     source_name: mt5
     provider: pending_cloud_source
@@ -290,6 +293,7 @@ assets:
     priority: 90
     enabled: false
     collection_mode: pending_cloud_source
+    pending_reason: "No validated free cloud M1 provider alias yet; test Dukascopy candidates before enabling."
   - symbol_code: FRA40
     source_name: mt5
     provider: pending_cloud_source
@@ -297,6 +301,7 @@ assets:
     priority: 90
     enabled: false
     collection_mode: pending_cloud_source
+    pending_reason: "No validated free cloud M1 provider alias yet; test Dukascopy candidates before enabling."
   - symbol_code: EU50
     source_name: mt5
     provider: pending_cloud_source
@@ -304,6 +309,7 @@ assets:
     priority: 90
     enabled: false
     collection_mode: pending_cloud_source
+    pending_reason: "No validated free cloud M1 provider alias yet; test Dukascopy candidates before enabling."
   - symbol_code: JPN225
     source_name: mt5
     provider: pending_cloud_source
@@ -311,3 +317,4 @@ assets:
     priority: 90
     enabled: false
     collection_mode: pending_cloud_source
+    pending_reason: "No validated free cloud M1 provider alias yet; test Dukascopy candidates before enabling."

@@ -1,6 +1,12 @@
-# Live Collector / Archive Remote
+# Live Collector / Archive R2
 
-Le chemin cible des donnees gratuites devient **GitHub Actions -> R2 archive chiffree**. Neon reste disponible en transition/fallback recent, mais il n'est plus l'objectif principal du pipeline.
+Derniere mise a jour: 2026-07-09
+
+Le chemin operationnel des donnees gratuites est maintenant:
+
+```text
+Providers gratuits -> GitHub Actions -> R2 archive chiffree -> PC local -> Postgres local -> backtests
+```
 
 Guide de reference actuel:
 
@@ -9,51 +15,47 @@ Guide de reference actuel:
 ## Architecture
 
 - GitHub Actions est le runtime remote officiel v1.
-- R2 doit stocker les candles gratuites sous forme Parquet/ZSTD puis chiffrees.
-- Neon Postgres devient legacy/transition pour les candles compactes recentes dans `live_market_candles`.
-- La base locale Postgres reste la source canonique pour les backtests, dashboards et archives longues.
-- Cloudflare Worker, Oracle VM et Docker remote collector sont legacy: ils ne sont plus le chemin operationnel.
-- R2/object storage devient la cible v1 pour l'archive gratuite.
+- R2 stocke les candles gratuites en Parquet/ZSTD puis AES-256-GCM.
+- La base locale Postgres reste la source canonique pour les backtests, dashboards et analyses.
+- Cloudflare Worker, Oracle VM et Docker remote collector sont legacy et hors chemin operationnel.
+- Databento est manuel uniquement; aucun workflow schedule ne le lance.
 
 Ce n'est pas un stream broker-grade. C'est un batch idempotent: chaque run recupere une fenetre de candles completes, cree des partitions journalieres verifiees, puis les upload dans R2.
 
-## Workflows GitHub Actions
+## Workflow GitHub Actions
 
-- `.github/workflows/live-collector-daily.yml`
-  - Actif par defaut.
-  - Cron quotidien `02:17 UTC`.
-  - Couvre tous les actifs cloud-compatibles enabled dans `configs/live_sources.yaml`.
+- `.github/workflows/archive-to-r2-daily.yml`
+  - Cron quotidien.
+  - Couvre tous les actifs gratuits enabled dans `configs/live_sources.yaml`.
+  - Exclut Databento.
+  - Utilise `max_workers=1` par defaut pour stabiliser Dukascopy.
+  - Applique `max_upload_mb` et `MARKET_ARCHIVE_MAX_BUCKET_GB=10`.
 
-- `.github/workflows/live-collector-priority.yml`
-  - Cron horaire `17 * * * *`, mais le job schedule ne tourne que si la variable repo `ENABLE_PRIORITY_COLLECTOR=true`.
-  - Toujours lancable manuellement par `workflow_dispatch`.
-  - Par defaut: actifs `priority <= 10`: `EURUSD`, `GER40`, `NAS100`, `BTCUSD`, `ETHUSD`.
-  - Databento est exclu des workflows schedules; MNQ se lance uniquement depuis l'app quand l'utilisateur clique.
-
-Chaque workflow produit:
+Chaque run produit:
 
 - logs console groupes GitHub;
-- artifact JSONL `collector-logs/*.jsonl`;
+- artifact JSONL `collector-logs/archive-to-r2-daily.jsonl`;
 - resume dans `GITHUB_STEP_SUMMARY`;
-- lignes DB dans `collector_runs`;
-- incidents par actif si un provider echoue plusieurs fois.
+- partitions R2 avec manifest verifiable.
 
-## Secrets Et Variables GitHub
+## Secrets GitHub
 
-Secrets:
-
-```text
-LIVE_REMOTE_DATABASE_URL=postgresql://...
-DATABENTO_API_KEY=...   # optionnel, uniquement pour les fetchs manuels MNQ/Databento
-```
-
-Variable optionnelle:
+Secrets R2:
 
 ```text
-ENABLE_PRIORITY_COLLECTOR=true
+R2_ACCOUNT_ID=...
+R2_ACCESS_KEY_ID=...
+R2_SECRET_ACCESS_KEY=...
+R2_BUCKET=...
+R2_ENDPOINT_URL=...
+MARKET_ARCHIVE_KEY=...
 ```
 
-Le workflow daily fonctionne sans cette variable. Le workflow priority schedule reste inactif tant qu'elle n'est pas definie a `true`.
+Secret manuel optionnel:
+
+```text
+DATABENTO_API_KEY=...
+```
 
 Si les valeurs sont deja dans `.env`, le helper local configure les secrets GitHub sans afficher les valeurs:
 
@@ -61,102 +63,61 @@ Si les valeurs sont deja dans `.env`, le helper local configure les secrets GitH
 .\scripts\configure_github_actions_secrets.ps1
 ```
 
-Pour activer aussi le cron horaire priority:
-
-```powershell
-.\scripts\configure_github_actions_secrets.ps1 -EnablePriorityCollector
-```
-
 Prerequis: GitHub CLI `gh` installe, `gh auth login` effectue, et repo GitHub remote configure.
-
-## Setup Remote
-
-Le workflow bootstrappe Neon a chaque run de facon idempotente:
-
-```bash
-export DATABASE_URL="$LIVE_REMOTE_DATABASE_URL"
-python -m ict.cli db upgrade
-python -m ict.cli sources sync
-python -m ict.cli symbols sync
-python -m ict.cli live register-sources --remote-database-url "$LIVE_REMOTE_DATABASE_URL"
-python -m ict.cli live collect-remote --emit-jsonl --log-path collector-logs/live-collector.jsonl
-```
-
-Pour tester sans toucher Neon ni les providers:
-
-```bash
-python -m ict.cli live collect-remote --dry-run --max-priority 10 --emit-jsonl --log-path collector-logs/dry-run.jsonl
-```
 
 ## Sources Live V1
 
 `configs/live_sources.yaml` contient les 40 actifs de l'univers:
 
-- enabled cloud:
+- enabled free:
   - `dukascopy_node`: forex, `GER40`, `NAS100`, `XAGUSD`;
   - `coinbase` avec fallback `kraken`: cryptos stockees sous la source locale `binance`.
 - manual paid:
-  - `databento`: `MNQ`, disabled dans le scheduler, active uniquement depuis le bouton Databento de l'app.
+  - `databento`: `MNQ`, disabled dans le scheduler, actif uniquement depuis le bouton Databento de l'app.
 - pending:
-  - actifs MT5-only sans source cloud gratuite fiable: `XAUUSD`, `SPX500`, `US30`, `UK100`, `FRA40`, `EU50`, `JPN225`.
+  - actifs sans source cloud gratuite valide: `XAUUSD`, `SPX500`, `US30`, `UK100`, `FRA40`, `EU50`, `JPN225`.
 
-Les pending sont enregistres dans Neon comme sources desactivees pour etre visibles, mais ils ne sont pas executes par les workflows.
+Les pending doivent garder un `pending_reason` explicite tant qu'ils ne sont pas actives.
 
-## Sync Locale
+## Restore Local
 
 Depuis le PC:
 
 ```powershell
-$env:LIVE_REMOTE_DATABASE_URL="postgresql://..."
-python -m ict.cli live sync --from-remote --symbols BTCUSD,EURUSD --since 2026-07-01
+python -m ict.cli archive restore-from-r2 --days 7
 ```
 
 Ou depuis l'interface React:
 
 - page `Data`;
 - selectionner un ou plusieurs actifs;
-- bouton `Fetch Neon`.
+- bouton `Preparer donnees R2`.
 
-La base locale reste la base de travail pour backtests et analyses.
+Le restore:
+
+- lit les manifests R2;
+- saute les partitions deja couvertes localement;
+- utilise `MARKET_ARCHIVE_CACHE_DIR` pour les fichiers chiffres;
+- dechiffre en memoire;
+- upsert en base locale sans doublons.
 
 ## Monitoring
 
 Commandes utiles:
 
 ```powershell
-python -m ict.cli live status --remote-database-url $env:LIVE_REMOTE_DATABASE_URL
-python -m ict.cli live incidents --remote-database-url $env:LIVE_REMOTE_DATABASE_URL
 python -m ict.cli live sources --enabled-only
-python -m ict.cli live storage --remote-database-url $env:LIVE_REMOTE_DATABASE_URL
+python -m ict.cli archive status --lookback-days 30
+python -m ict.cli archive configured
+python -m ict.cli archive collect-to-r2 --dry-run --max-bucket-gb 10
 ```
 
 Dans l'UI:
 
-- page `Data`: couverture locale, dernier candle Neon, fetch Neon pour les actifs gratuits, fetch Databento manuel pour MNQ;
-- page `Live Collector` legacy Streamlit: runs, incidents, lag par source.
-
-## Retention Neon
-
-Objectif par defaut apres mesure reelle: garder environ 30 jours M1 dans Neon comme buffer remote. La base locale reste l'archive 180 jours+ pour les backtests.
-
-Pourquoi pas 180 jours dans Neon: le 2026-07-08, `live_market_candles` contenait deja 2 264 673 candles crypto pour environ 472.8 MB, proche du quota Neon Free de 0.5 GB par projet. Un seul projet Neon Free ne peut donc pas garder 180 jours M1 pour tout l'univers de 32 actifs cloud gratuits.
-
-Pour garder Neon sous controle, utiliser un prune manuel et verifie:
-
-```powershell
-# Dry-run par defaut: ne supprime rien.
-python -m ict.cli live prune-remote --remote-database-url $env:LIVE_REMOTE_DATABASE_URL --retention-days 30
-
-# Suppression effective seulement apres verification locale.
-python -m ict.cli live prune-remote --remote-database-url $env:LIVE_REMOTE_DATABASE_URL --retention-days 30 --execute
-```
-
-La commande garde `--require-local` active par defaut: un groupe de candles n'est supprimable de Neon que si la base locale contient au moins autant de candles pour le meme symbole, source, source_symbol, timeframe et cutoff. Pour forcer une suppression sans cette verification, il faut passer explicitement `--no-require-local`.
-
-Si l'objectif reste 180 jours disponibles sur un service gratuit, il faut ajouter une archive objet compressee type Cloudflare R2/Parquet, ou plusieurs projets Neon segmentes par groupe d'actifs. Neon seul doit rester un buffer SQL recent.
+- page `Data`: couverture locale, couverture R2, pending reasons, usage bucket R2, restore R2 et Databento manuel.
 
 ## Legacy
 
 - `collector/cloudflare`: conserve pour reference technique, hors chemin operationnel.
-- `deploy/collector/docker-compose.yml` et `scripts/live_collector_service.py`: conserve comme option legacy si un jour une VM gratuite fiable est disponible, mais ce n'est plus la cible.
 - Oracle VM: tentative annulee et ressources nettoyees; ne pas recreer sans verifier un cout strictement zero.
+- Les anciennes decisions remote SQL sont conservees uniquement dans `docs/PROJECT_HISTORY.md`.

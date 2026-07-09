@@ -24,6 +24,7 @@ class LiveSource:
     dataset: str | None = None
     schema: str | None = None
     max_cost_usd: float | None = None
+    pending_reason: str | None = None
 
 
 def load_live_sources(path: str | Path = "configs/live_sources.yaml") -> list[LiveSource]:
@@ -58,6 +59,7 @@ def load_live_sources(path: str | Path = "configs/live_sources.yaml") -> list[Li
                 dataset=str(merged["dataset"]) if merged.get("dataset") else None,
                 schema=str(merged["schema"]) if merged.get("schema") else None,
                 max_cost_usd=float(merged["max_cost_usd"]) if merged.get("max_cost_usd") is not None else None,
+                pending_reason=str(merged["pending_reason"]) if merged.get("pending_reason") else None,
             )
         )
     return sources

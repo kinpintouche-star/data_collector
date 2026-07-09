@@ -30,10 +30,10 @@ def test_dashboard_frame_is_arrow_compatible() -> None:
 
 
 def test_data_management_fetch_channel_mapping() -> None:
-    assert dashboard_app._fetch_channel(pd.Series({"source_type": "dukascopy"})) == "Dukascopy"
+    assert dashboard_app._fetch_channel(pd.Series({"source_type": "dukascopy"})) == "R2"
     assert dashboard_app._fetch_channel(pd.Series({"source_type": "databento"})) == "Databento"
-    assert dashboard_app._fetch_channel(pd.Series({"source_type": "binance_public"})) == "Neon"
-    assert dashboard_app._fetch_channel(pd.Series({"source_type": "mt5"})) == "Neon"
+    assert dashboard_app._fetch_channel(pd.Series({"source_type": "binance_public"})) == "R2"
+    assert dashboard_app._fetch_channel(pd.Series({"source_type": "mt5"})) == "R2"
 
 
 def test_dukascopy_uses_latest_complete_utc_day() -> None:

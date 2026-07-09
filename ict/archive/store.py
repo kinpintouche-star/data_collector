@@ -17,9 +17,11 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from sqlalchemy import text
 
 from ict.core.config import get_settings
 from ict.db.repositories import json_safe
+from ict.db.session import build_engine
 from ict.live.config import LiveSource, load_live_sources
 from ict.live.providers import fetch_live_source, previous_utc_day_window
 from ict.live.sync import LiveSyncResult, read_remote_candles, upsert_remote_frame
@@ -170,6 +172,7 @@ class ArchiveRestoreResult:
     rows_updated: int
     partitions: list[dict[str, Any]] = field(default_factory=list)
     missing: list[dict[str, Any]] = field(default_factory=list)
+    skipped: list[dict[str, Any]] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -182,8 +185,10 @@ class ArchiveRestoreResult:
             "rows_updated": self.rows_updated,
             "partition_count": len(self.partitions),
             "missing_count": len(self.missing),
+            "skipped_count": len(self.skipped),
             "partitions": self.partitions,
             "missing": self.missing,
+            "skipped": self.skipped,
         }
 
 
@@ -654,6 +659,8 @@ def restore_from_r2(
     store: ObjectStore | None = None,
     archive_key: bytes | None = None,
     prefix: str | None = None,
+    cache_dir: str | Path | None = None,
+    skip_existing_local: bool = False,
 ) -> ArchiveRestoreResult:
     start = _utc_dt(since)
     end = _utc_dt(until)
@@ -662,6 +669,7 @@ def restore_from_r2(
     store = store or _r2_store_from_settings()
     archive_key = archive_key or _archive_key_from_settings()
     prefix = _clean_prefix(prefix or get_settings().market_archive_prefix)
+    cache_root = _resolve_cache_dir(cache_dir, store)
     symbol_list = [symbol.strip().upper() for symbol in symbols if symbol.strip()]
     source_list = [source.strip() for source in source_names if source.strip()]
     if not symbol_list or not source_list:
@@ -670,23 +678,38 @@ def restore_from_r2(
     results: list[LiveSyncResult] = []
     restored: list[dict[str, Any]] = []
     missing: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
     downloaded = 0
     for source_name in source_list:
         for symbol_code in symbol_list:
             for day in _days_between(start, end):
                 _, manifest_key = _partition_keys(prefix, source_name, symbol_code, timeframe, day)
                 try:
-                    manifest = json.loads(store.get_bytes(manifest_key).decode("utf-8"))
-                    encrypted_payload = store.get_bytes(manifest["object_key"])
+                    manifest = _load_manifest(store, manifest_key, cache_root)
                 except FileNotFoundError:
                     row = {"symbol_code": symbol_code, "source_name": source_name, "timeframe": timeframe.upper(), "day": day.isoformat()}
                     missing.append(row)
                     if not continue_on_missing:
                         raise ValueError(f"Missing archive partition: {row}") from None
                     continue
-                downloaded += len(encrypted_payload)
-                if downloaded > int(max_download_mb * 1024 * 1024):
-                    raise ValueError(f"Archive restore would exceed max_download_mb={max_download_mb}.")
+                _verify_manifest_metadata(manifest)
+                if skip_existing_local and _local_partition_satisfies_manifest(manifest):
+                    skipped.append(
+                        {
+                            "symbol_code": symbol_code,
+                            "source_name": source_name,
+                            "timeframe": timeframe.upper(),
+                            "day": day.isoformat(),
+                            "reason": "local_already_covers_partition",
+                            "manifest_key": manifest_key,
+                        }
+                    )
+                    continue
+                encrypted_payload, cache_hit = _load_encrypted_payload(store, manifest, cache_root)
+                if not cache_hit:
+                    downloaded += len(encrypted_payload)
+                    if downloaded > int(max_download_mb * 1024 * 1024):
+                        raise ValueError(f"Archive restore would exceed max_download_mb={max_download_mb}.")
                 _verify_manifest_blob(manifest, encrypted_payload)
                 parquet_payload = _decrypt_bytes(encrypted_payload, archive_key)
                 if _sha256(parquet_payload) != manifest.get("parquet_sha256"):
@@ -704,11 +727,17 @@ def restore_from_r2(
                         "rows_read": result.rows_read,
                         "rows_written": result.rows_written,
                         "manifest_key": manifest_key,
+                        "cache_hit": cache_hit,
                     }
                 )
 
     combined = _combine_sync_results(results)
-    status = "completed" if restored and not missing else "partial" if restored else "missing"
+    if restored and not missing:
+        status = "completed"
+    elif restored or skipped:
+        status = "partial" if missing else "completed"
+    else:
+        status = "missing"
     return ArchiveRestoreResult(
         status=status,
         since=start,
@@ -719,6 +748,7 @@ def restore_from_r2(
         rows_updated=combined.rows_updated,
         partitions=restored,
         missing=missing,
+        skipped=skipped,
     )
 
 
@@ -980,16 +1010,132 @@ def _decrypt_bytes(payload: bytes, key: bytes) -> bytes:
 
 
 def _verify_manifest_blob(manifest: dict[str, Any], encrypted_payload: bytes) -> None:
+    _verify_manifest_metadata(manifest)
+    if int(manifest.get("encrypted_bytes") or -1) != len(encrypted_payload):
+        raise ValueError("Encrypted size mismatch.")
+    if str(manifest.get("encrypted_sha256")) != _sha256(encrypted_payload):
+        raise ValueError("Encrypted checksum mismatch.")
+
+
+def _verify_manifest_metadata(manifest: dict[str, Any]) -> None:
     if manifest.get("status") != "complete":
         raise ValueError("Archive manifest is not complete.")
     if int(manifest.get("schema_version") or 0) != ARCHIVE_SCHEMA_VERSION:
         raise ValueError("Unsupported archive schema version.")
     if manifest.get("data_format") != ARCHIVE_DATA_FORMAT:
         raise ValueError("Unsupported archive data format.")
-    if int(manifest.get("encrypted_bytes") or -1) != len(encrypted_payload):
-        raise ValueError("Encrypted size mismatch.")
-    if str(manifest.get("encrypted_sha256")) != _sha256(encrypted_payload):
-        raise ValueError("Encrypted checksum mismatch.")
+
+
+def _resolve_cache_dir(cache_dir: str | Path | None, store: ObjectStore) -> Path | None:
+    if cache_dir is None and isinstance(store, LocalObjectStore):
+        return None
+    configured = cache_dir if cache_dir is not None else get_settings().market_archive_cache_dir
+    if not configured:
+        return None
+    root = Path(configured)
+    if not root.is_absolute():
+        root = Path.cwd() / root
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def _cache_path(cache_root: Path, key: str) -> Path:
+    return cache_root / key
+
+
+def _write_cache(cache_root: Path | None, key: str, payload: bytes) -> None:
+    if cache_root is None:
+        return
+    path = _cache_path(cache_root, key)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(payload)
+
+
+def _read_valid_cached_payload(
+    cache_root: Path | None,
+    key: str,
+    *,
+    expected_sha256: str | None = None,
+    expected_size: int | None = None,
+) -> bytes | None:
+    if cache_root is None:
+        return None
+    path = _cache_path(cache_root, key)
+    if not path.exists():
+        return None
+    payload = path.read_bytes()
+    if expected_size is not None and len(payload) != expected_size:
+        return None
+    if expected_sha256 is not None and _sha256(payload) != expected_sha256:
+        return None
+    return payload
+
+
+def _load_manifest(store: ObjectStore, manifest_key: str, cache_root: Path | None) -> dict[str, Any]:
+    payload = store.get_bytes(manifest_key)
+    _write_cache(cache_root, manifest_key, payload)
+    return json.loads(payload.decode("utf-8"))
+
+
+def _load_encrypted_payload(
+    store: ObjectStore,
+    manifest: dict[str, Any],
+    cache_root: Path | None,
+) -> tuple[bytes, bool]:
+    object_key = str(manifest["object_key"])
+    expected_sha256 = str(manifest.get("encrypted_sha256") or "")
+    expected_size = int(manifest.get("encrypted_bytes") or 0)
+    cached = _read_valid_cached_payload(
+        cache_root,
+        object_key,
+        expected_sha256=expected_sha256 or None,
+        expected_size=expected_size or None,
+    )
+    if cached is not None:
+        return cached, True
+    payload = store.get_bytes(object_key)
+    _write_cache(cache_root, object_key, payload)
+    return payload, False
+
+
+def _local_partition_satisfies_manifest(manifest: dict[str, Any]) -> bool:
+    partition = manifest.get("partition") or {}
+    start = pd.Timestamp(manifest["start"]).to_pydatetime()
+    end = pd.Timestamp(manifest["end"]).to_pydatetime()
+    query = text(
+        """
+        SELECT
+            COUNT(*)::bigint AS candle_rows,
+            MIN(c.time_open) AS first_time,
+            MAX(c.time_open) AS last_time
+        FROM market_candles c
+        JOIN symbols s ON s.id = c.symbol_id
+        JOIN data_sources ds ON ds.id = c.source_id
+        WHERE s.symbol_code = :symbol_code
+            AND ds.name = :source_name
+            AND c.timeframe = :timeframe
+            AND c.time_open >= :start
+            AND c.time_open <= :end
+        """
+    )
+    with build_engine().connect() as connection:
+        row = connection.execute(
+            query,
+            {
+                "symbol_code": str(partition["symbol_code"]).upper(),
+                "source_name": str(partition["source_name"]),
+                "timeframe": str(partition["timeframe"]).upper(),
+                "start": start,
+                "end": end,
+            },
+        ).mappings().one()
+    return (
+        int(row["candle_rows"] or 0) >= int(manifest.get("rows") or 0)
+        and row["first_time"] is not None
+        and row["last_time"] is not None
+        and pd.Timestamp(row["first_time"]).to_pydatetime() <= start
+        and pd.Timestamp(row["last_time"]).to_pydatetime() >= end
+    )
 
 
 def _days_between(start: datetime, end: datetime) -> list[date]:

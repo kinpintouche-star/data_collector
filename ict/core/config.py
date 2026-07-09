@@ -26,7 +26,6 @@ if BaseSettings is not None:
         mt5_password: Optional[str] = Field(default=None, alias="MT5_PASSWORD")  # type: ignore[misc]
         mt5_server: Optional[str] = Field(default=None, alias="MT5_SERVER")  # type: ignore[misc]
         databento_api_key: Optional[str] = Field(default=None, alias="DATABENTO_API_KEY")  # type: ignore[misc]
-        live_remote_database_url: Optional[str] = Field(default=None, alias="LIVE_REMOTE_DATABASE_URL")  # type: ignore[misc]
         market_archive_key: Optional[str] = Field(default=None, alias="MARKET_ARCHIVE_KEY")  # type: ignore[misc]
         market_archive_cache_dir: str = Field(default=".cache/market_archive", alias="MARKET_ARCHIVE_CACHE_DIR")  # type: ignore[misc]
         market_archive_max_bucket_gb: float = Field(default=10.0, alias="MARKET_ARCHIVE_MAX_BUCKET_GB")  # type: ignore[misc]
@@ -53,7 +52,6 @@ else:
         mt5_password: Optional[str] = os.getenv("MT5_PASSWORD")
         mt5_server: Optional[str] = os.getenv("MT5_SERVER")
         databento_api_key: Optional[str] = os.getenv("DATABENTO_API_KEY")
-        live_remote_database_url: Optional[str] = os.getenv("LIVE_REMOTE_DATABASE_URL")
         market_archive_key: Optional[str] = os.getenv("MARKET_ARCHIVE_KEY")
         market_archive_cache_dir: str = os.getenv("MARKET_ARCHIVE_CACHE_DIR", ".cache/market_archive")
         market_archive_max_bucket_gb: float = float(os.getenv("MARKET_ARCHIVE_MAX_BUCKET_GB", "10"))

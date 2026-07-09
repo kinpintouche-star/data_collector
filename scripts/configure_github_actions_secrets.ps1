@@ -1,6 +1,5 @@
 param(
-    [string]$EnvFile = ".env",
-    [switch]$EnablePriorityCollector
+    [string]$EnvFile = ".env"
 )
 
 $ErrorActionPreference = "Stop"
@@ -34,7 +33,6 @@ if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
 $envValues = Read-DotEnv -Path $EnvFile
 $requiredSecrets = @()
 $optionalSecrets = @(
-    "LIVE_REMOTE_DATABASE_URL",
     "DATABENTO_API_KEY",
     "R2_ACCOUNT_ID",
     "R2_ACCESS_KEY_ID",
@@ -60,12 +58,4 @@ foreach ($name in ($requiredSecrets + $optionalSecrets)) {
     }
 }
 
-if ($EnablePriorityCollector) {
-    gh variable set ENABLE_PRIORITY_COLLECTOR --body "true"
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to configure GitHub Actions variable: ENABLE_PRIORITY_COLLECTOR"
-    }
-    Write-Output "ENABLE_PRIORITY_COLLECTOR configured as GitHub variable."
-} else {
-    Write-Output "Priority collector schedule left disabled. Rerun with -EnablePriorityCollector to enable hourly priority runs."
-}
+Write-Output "GitHub Actions secrets configured for R2 archive workflow."

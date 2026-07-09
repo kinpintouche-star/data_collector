@@ -21,7 +21,6 @@ from ict.archive.store import (
     archive_configured,
     archive_status as r2_archive_status,
     collect_live_sources_to_r2,
-    export_remote_to_r2,
     restore_from_r2,
     verify_r2_archive,
 )
@@ -46,10 +45,8 @@ from ict.db.repositories import (
     json_safe,
 )
 from ict.db.session import build_engine, session_scope
-from ict.live.collector import collect_remote_live
 from ict.live.config import load_live_sources
 from ict.live.providers import discover_oanda_instruments
-from ict.live.sync import prune_remote_candles, remote_storage_usage, sync_local_candles_to_remote, sync_remote_candles
 from ict.strategy.params import StrategyParams, load_strategy_params
 
 app = typer.Typer(help="ICT CRT M1 backtesting platform")
@@ -241,17 +238,6 @@ def _fallback_tick_size(symbol_code: str, asset_type: str | None) -> float:
 
 def _print_json(payload) -> None:
     console.print_json(data=json_safe(payload))
-
-
-def _remote_database_url(value: str | None) -> str:
-    if value:
-        return value
-    import os
-
-    env_value = os.getenv("LIVE_REMOTE_DATABASE_URL") or get_settings().live_remote_database_url
-    if not env_value:
-        raise typer.BadParameter("Use --remote-database-url or set LIVE_REMOTE_DATABASE_URL.")
-    return env_value
 
 
 def _selected_archive_sources(
@@ -1090,44 +1076,6 @@ def live_incidents(
     _print_json({"count": len(rows), "incidents": rows})
 
 
-@live_app.command("sync")
-def live_sync(
-    from_remote: bool = typer.Option(False, "--from-remote"),
-    to_remote: bool = typer.Option(False, "--to-remote"),
-    remote_database_url: Optional[str] = typer.Option(None, "--remote-database-url"),
-    since: Optional[str] = typer.Option(None, "--since"),
-    until: Optional[str] = typer.Option(None, "--until"),
-    symbols: Optional[str] = typer.Option(None, "--symbols"),
-    limit: int = typer.Option(250000, "--limit"),
-    chunk_days: int = typer.Option(7, "--chunk-days"),
-    retention_days: int = typer.Option(30, "--retention-days"),
-    config: str = typer.Option("configs/live_sources.yaml", "--config"),
-) -> None:
-    if from_remote == to_remote:
-        raise typer.BadParameter("Use exactly one of --from-remote or --to-remote.")
-    remote_url = _remote_database_url(remote_database_url)
-    if from_remote:
-        result = sync_remote_candles(
-            remote_url,
-            since=_parse_date(since) if since else None,
-            until=_parse_date(until) if until else None,
-            symbols=_csv_values(symbols) if symbols else None,
-            limit=limit,
-        )
-    else:
-        result = sync_local_candles_to_remote(
-            remote_url,
-            since=_parse_date(since) if since else None,
-            until=_parse_date(until) if until else None,
-            symbols=_csv_values(symbols) if symbols else None,
-            limit=limit,
-            chunk_days=chunk_days,
-            retention_days=retention_days,
-            config=config,
-        )
-    _print_json(result.as_dict())
-
-
 @archive_app.command("generate-key")
 def archive_generate_key() -> None:
     """Generate a MARKET_ARCHIVE_KEY value without storing it."""
@@ -1185,34 +1133,6 @@ def archive_collect_to_r2(
     _print_json(result.as_dict())
 
 
-@archive_app.command("export-to-r2")
-def archive_export_to_r2(
-    remote_database_url: Optional[str] = typer.Option(None, "--remote-database-url"),
-    since: Optional[str] = typer.Option(None, "--since"),
-    until: Optional[str] = typer.Option(None, "--until"),
-    symbols: Optional[str] = typer.Option(None, "--symbols"),
-    sources: Optional[str] = typer.Option(None, "--sources"),
-    timeframe: str = typer.Option("M1", "--timeframe"),
-    limit: int = typer.Option(500000, "--limit"),
-    max_upload_mb: float = typer.Option(256.0, "--max-upload-mb"),
-    max_bucket_gb: Optional[float] = typer.Option(None, "--max-bucket-gb"),
-) -> None:
-    """Legacy/transition helper: archive candles already present in Neon."""
-
-    result = export_remote_to_r2(
-        _remote_database_url(remote_database_url),
-        since=_parse_date(since) if since else None,
-        until=_parse_date(until) if until else None,
-        symbols=_csv_values(symbols) if symbols else None,
-        source_names=_csv_values(sources) if sources else None,
-        timeframe=timeframe.upper(),
-        limit=limit,
-        max_upload_mb=max_upload_mb,
-        max_bucket_gb=max_bucket_gb,
-    )
-    _print_json(result.as_dict())
-
-
 @archive_app.command("restore-from-r2")
 def archive_restore_from_r2(
     since: Optional[str] = typer.Option(None, "--since"),
@@ -1224,6 +1144,7 @@ def archive_restore_from_r2(
     config: str = typer.Option("configs/live_sources.yaml", "--config"),
     max_download_mb: float = typer.Option(1024.0, "--max-download-mb"),
     continue_on_missing: bool = typer.Option(True, "--continue-on-missing/--fail-on-missing"),
+    skip_existing_local: bool = typer.Option(True, "--skip-existing-local/--restore-existing-local"),
 ) -> None:
     if since or until:
         if not (since and until):
@@ -1244,6 +1165,7 @@ def archive_restore_from_r2(
             timeframe=timeframe.upper(),
             continue_on_missing=continue_on_missing,
             max_download_mb=max_download_mb,
+            skip_existing_local=skip_existing_local,
         )
         results.append({"symbol_code": source.symbol_code, "source_name": source.source_name, **result.as_dict()})
     _print_json({"status": "completed", "since": start, "until": end, "assets": len(results), "results": results})
@@ -1310,82 +1232,6 @@ def archive_verify_command(
             }
         )
     _print_json({"since": start, "until": end, "assets": len(results), "results": results})
-
-
-@live_app.command("storage")
-def live_storage(
-    remote_database_url: Optional[str] = typer.Option(None, "--remote-database-url"),
-) -> None:
-    remote_url = _remote_database_url(remote_database_url)
-    _print_json(remote_storage_usage(remote_url))
-
-
-@live_app.command("prune-remote")
-def live_prune_remote(
-    remote_database_url: Optional[str] = typer.Option(None, "--remote-database-url"),
-    older_than: Optional[str] = typer.Option(None, "--older-than"),
-    retention_days: int = typer.Option(30, "--retention-days"),
-    symbols: Optional[str] = typer.Option(None, "--symbols"),
-    require_local: bool = typer.Option(True, "--require-local/--no-require-local"),
-    execute: bool = typer.Option(False, "--execute/--dry-run"),
-) -> None:
-    if older_than:
-        cutoff = _parse_date(older_than)
-    else:
-        cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
-    result = prune_remote_candles(
-        _remote_database_url(remote_database_url),
-        cutoff=cutoff,
-        symbols=_csv_values(symbols) if symbols else None,
-        require_local=require_local,
-        dry_run=not execute,
-    )
-    _print_json(result.as_dict())
-
-
-@live_app.command("collect-remote")
-def live_collect_remote(
-    remote_database_url: Optional[str] = typer.Option(None, "--remote-database-url"),
-    since: Optional[str] = typer.Option(None, "--since"),
-    until: Optional[str] = typer.Option(None, "--until"),
-    symbols: Optional[str] = typer.Option(None, "--symbols"),
-    config: str = typer.Option("configs/live_sources.yaml", "--config"),
-    max_priority: Optional[int] = typer.Option(None, "--max-priority"),
-    max_workers: int = typer.Option(4, "--max-workers"),
-    upload_chunk_rows: int = typer.Option(2500, "--upload-chunk-rows"),
-    submit_pause_seconds: float = typer.Option(0.25, "--submit-pause-seconds"),
-    trigger_type: str = typer.Option("github_actions", "--trigger-type"),
-    emit_jsonl: bool = typer.Option(False, "--emit-jsonl/--no-jsonl"),
-    log_path: Optional[str] = typer.Option(None, "--log-path"),
-    dry_run: bool = typer.Option(False, "--dry-run"),
-) -> None:
-    if dry_run:
-        import os
-
-        remote_url = (
-            remote_database_url
-            or os.getenv("LIVE_REMOTE_DATABASE_URL")
-            or get_settings().live_remote_database_url
-            or "dry-run"
-        )
-    else:
-        remote_url = _remote_database_url(remote_database_url)
-    effective_log_path = log_path or ("collector-logs/live-collector.jsonl" if emit_jsonl else None)
-    result = collect_remote_live(
-        remote_url,
-        since=_parse_date(since) if since else None,
-        until=_parse_date(until) if until else None,
-        symbols=_csv_values(symbols) if symbols else None,
-        config=config,
-        max_priority=max_priority,
-        max_workers=max_workers,
-        upload_chunk_rows=upload_chunk_rows,
-        submit_pause_seconds=submit_pause_seconds,
-        trigger_type=trigger_type,
-        dry_run=dry_run,
-        log_path=effective_log_path,
-    )
-    _print_json(result.as_dict())
 
 
 @app.command("dashboard")

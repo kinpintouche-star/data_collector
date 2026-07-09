@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArchiveRestore, CloudDownload, Database, RefreshCcw, Search, Square, SquareCheckBig } from "lucide-react";
+import { ArchiveRestore, Database, RefreshCcw, Search, Square, SquareCheckBig } from "lucide-react";
 import { getDataApiUsage, getDataCoverage, getDataFetchJob, launchDataFetch } from "../api";
 import type { DataApiUsagePayload, DataCoveragePayload, DataCoverageRow, DataFetchChannel, DataFetchJob } from "../types";
 
 const channelLabels: Record<DataFetchChannel, string> = {
   auto: "Auto",
   r2: "R2",
-  neon: "Neon",
   databento: "Databento"
 };
 
@@ -47,9 +46,6 @@ function channelIsApplicable(row: DataCoverageRow, channel: DataFetchChannel): b
   if (channel === "auto") {
     return true;
   }
-  if (channel === "neon") {
-    return row.source_type !== "databento";
-  }
   if (channel === "r2") {
     return row.source_type !== "databento";
   }
@@ -67,9 +63,6 @@ function configMissing(rows: DataCoverageRow[], channel: DataFetchChannel, setti
     channel === "auto"
       ? new Set(rows.map((row) => row.recommended_channel.toLowerCase()))
       : new Set([channel]);
-  if (channels.has("neon") && !settings.neon_configured) {
-    return true;
-  }
   if (channels.has("r2") && !settings.r2_configured) {
     return true;
   }
@@ -102,7 +95,6 @@ export function DataManagement() {
   const [job, setJob] = useState<DataFetchJob | null>(null);
   const [fallbackDays, setFallbackDays] = useState(180);
   const [overlapMinutes, setOverlapMinutes] = useState(5);
-  const [neonLimit, setNeonLimit] = useState(250000);
   const [maxDatabentoUsd, setMaxDatabentoUsd] = useState(5);
 
   const rows = coverage?.rows ?? [];
@@ -201,7 +193,6 @@ export function DataManagement() {
         assets: applicableRows.map((row) => ({ symbol_code: row.symbol_code, source_name: row.source_name })),
         fallback_days: fallbackDays,
         overlap_minutes: overlapMinutes,
-        neon_limit: neonLimit,
         max_databento_usd: maxDatabentoUsd
       });
       setJob(next);
@@ -258,6 +249,14 @@ export function DataManagement() {
           <span>Flags</span>
           <strong>{formatNumber(coverage?.summary.flagged_candles)}</strong>
         </div>
+        <div>
+          <span>Scheduled R2</span>
+          <strong>{formatNumber(coverage?.summary.scheduled_free)}</strong>
+        </div>
+        <div>
+          <span>Pending</span>
+          <strong>{formatNumber(coverage?.summary.pending_cloud_source)}</strong>
+        </div>
       </div>
 
       <section className="data-controls">
@@ -273,7 +272,6 @@ export function DataManagement() {
           <select value={channelFilter} onChange={(event) => setChannelFilter(event.target.value)}>
             <option value="all">Tous</option>
             <option value="R2">R2</option>
-            <option value="Neon">Neon</option>
             <option value="Databento">Databento</option>
           </select>
         </label>
@@ -309,16 +307,11 @@ export function DataManagement() {
           <Square size={16} />
           <span>Clear</span>
         </button>
-        <button className="icon-button" onClick={() => selectChannel("Neon")} type="button">Neon only</button>
         <button className="icon-button" onClick={() => selectChannel("R2")} type="button">R2 only</button>
         <button className="icon-button" onClick={() => selectChannel("Databento")} type="button">Databento only</button>
         <button className="primary-inline" disabled={actionDisabled("r2")} onClick={() => void runFetch("r2")} type="button">
           <ArchiveRestore size={17} />
-          <span>Restore R2</span>
-        </button>
-        <button className="icon-button" disabled={actionDisabled("neon")} onClick={() => void runFetch("neon")} type="button">
-          <CloudDownload size={17} />
-          <span>Fetch Neon recent</span>
+          <span>Préparer données R2</span>
         </button>
         <button className="icon-button" disabled={actionDisabled("databento")} onClick={() => void runFetch("databento")} type="button">Fetch Databento</button>
       </section>
@@ -333,10 +326,6 @@ export function DataManagement() {
           <input type="number" min={0} max={240} value={overlapMinutes} onChange={(event) => setOverlapMinutes(Number(event.target.value))} />
         </label>
         <label className="field">
-          <span>Neon row limit</span>
-          <input type="number" min={1000} max={2000000} step={10000} value={neonLimit} onChange={(event) => setNeonLimit(Number(event.target.value))} />
-        </label>
-        <label className="field">
           <span>Max Databento USD</span>
           <input type="number" min={0.01} max={125} step={0.25} value={maxDatabentoUsd} onChange={(event) => setMaxDatabentoUsd(Number(event.target.value))} />
         </label>
@@ -345,8 +334,8 @@ export function DataManagement() {
       <div className="data-config-line">
         <Database size={16} />
         <span>R2: {coverage?.settings.r2_configured ? "configuré" : "non configuré"}</span>
-        <span>Neon: {coverage?.settings.neon_configured ? "configuré" : "non configuré"}</span>
         <span>Databento: {coverage?.settings.databento_configured ? "configuré" : "non configuré"}</span>
+        <span>R2 usage: {formatNumber(coverage?.settings.r2_bucket_usage.total_gb, 3)} / {formatNumber(coverage?.settings.r2_bucket_usage.max_gb, 1)} GB</span>
         <span>Sélection: {selectedRows.length}</span>
       </div>
 
@@ -385,7 +374,6 @@ export function DataManagement() {
               <th>Statut</th>
               <th>Local last</th>
               <th>R2 last</th>
-              <th>Neon last</th>
               <th>Rows</th>
               <th>Flags</th>
               <th>Actions</th>
@@ -406,7 +394,7 @@ export function DataManagement() {
                   </td>
                   <td>
                     <span>{row.source_name}</span>
-                    <small>{row.source_type ?? "-"}</small>
+                    <small>{row.pending_reason ? `Pending: ${row.pending_reason}` : row.source_type ?? row.provider ?? "-"}</small>
                   </td>
                   <td>{row.recommended_channel}</td>
                   <td><span className={`freshness ${row.freshness_status}`}>{statusLabel(row)}</span></td>
@@ -415,12 +403,11 @@ export function DataManagement() {
                     {formatDate(row.r2_last)}
                     <small>{row.r2_available ? `${formatNumber(row.r2_partitions)} parts` : "-"}</small>
                   </td>
-                  <td>{formatDate(row.neon_last)}</td>
                   <td>{formatNumber(row.candle_rows)}</td>
                   <td>{formatNumber(row.flagged_candles)}</td>
                   <td>
                     <div className="row-actions">
-                      {(["r2", "neon", "databento"] as DataFetchChannel[]).map((channel) => (
+                      {(["r2", "databento"] as DataFetchChannel[]).map((channel) => (
                         <button
                           disabled={!channelIsApplicable(row, channel) || configMissing([row], channel, coverage?.settings ?? null)}
                           key={channel}
@@ -437,7 +424,7 @@ export function DataManagement() {
             })}
             {!filteredRows.length && (
               <tr>
-                <td colSpan={11}>
+                <td colSpan={10}>
                   <div className="empty-state">Aucun actif ne correspond aux filtres.</div>
                 </td>
               </tr>

@@ -87,7 +87,7 @@ Databento downloaded OHLCV CSV ZIPs can also be imported directly through `--fil
 
 - 20 forex pairs through `dukascopy`.
 - 20 mainstream assets across metals, crypto, and indices, including native `MNQ` through Databento.
-- Crypto assets use `binance`; unsupported free-live assets fall back to Neon warehouse sync in the dashboard fetch channel.
+- Crypto assets use `binance`; unsupported free-live assets remain `pending_cloud_source` until a validated free R2-compatible provider exists.
 
 Collect six months in monthly packets:
 
