@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
@@ -108,3 +109,27 @@ def test_data_routes_are_patchable_without_database(monkeypatch) -> None:
 
     assert client.get("/api/data/coverage").json() == {"rows": [{"symbol_code": "EURUSD"}]}
     assert client.get("/api/data/api-usage").json() == {"rows": [{"fetch_channel": "R2"}]}
+
+
+def test_data_settings_exposes_archive_cache_dir(monkeypatch) -> None:
+    monkeypatch.setattr(
+        data_management,
+        "get_settings",
+        lambda: SimpleNamespace(
+            databento_api_key=None,
+            market_archive_cache_dir="E:/tradinglab/.cache/market_archive",
+            market_archive_max_bucket_gb=10,
+        ),
+    )
+    monkeypatch.setattr(data_management, "archive_configured", lambda: True)
+    monkeypatch.setattr(
+        data_management,
+        "archive_bucket_usage",
+        lambda max_bytes=None: SimpleNamespace(as_dict=lambda: {"max_bytes": max_bytes, "total_gb": 0.25}),
+    )
+
+    payload = data_management._data_settings_payload()
+
+    assert payload["r2_configured"] is True
+    assert payload["archive_cache_dir"] == "E:/tradinglab/.cache/market_archive"
+    assert payload["r2_bucket_usage"]["max_bytes"] == 10 * 1024 * 1024 * 1024

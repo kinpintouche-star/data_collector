@@ -179,3 +179,31 @@ Regle importante: si on ajoute une source R2 qui sort du brut, elle doit passer 
 - Un backtest utilise la DB locale apres restauration.
 - Databento reste strictement manuel.
 - Les limites gratuites sont visibles et protegees.
+
+## Demarrage Local
+
+Docker utilise `scripts/docker_api_entrypoint.sh` pour garder le lancement lisible:
+
+1. migrations;
+2. seed des assets/sources/strategies;
+3. restore R2 optionnel;
+4. demarrage FastAPI.
+
+Variables utiles:
+
+```text
+MARKET_ARCHIVE_STARTUP_RESTORE_ENABLED=true
+MARKET_ARCHIVE_STARTUP_DAYS=7
+MARKET_ARCHIVE_STARTUP_SYMBOLS=
+MARKET_ARCHIVE_STARTUP_SOURCES=
+MARKET_ARCHIVE_STARTUP_MAX_DOWNLOAD_MB=1024
+MARKET_ARCHIVE_STARTUP_RESTORE_FAIL_FAST=false
+MARKET_ARCHIVE_CACHE_DIR=.cache/market_archive
+```
+
+Le restore de demarrage est volontairement court par defaut. Pour preparer
+une vraie fenetre de backtest, utiliser la page `Data` ou:
+
+```powershell
+.\scripts\dev.ps1 restore-r2
+```

@@ -1,5 +1,5 @@
 param(
-    [ValidateSet("up", "down", "restart", "ps", "logs", "logs-api", "logs-web", "migrate", "seed", "urls")]
+    [ValidateSet("up", "down", "restart", "ps", "logs", "logs-api", "logs-web", "migrate", "seed", "restore-r2", "r2-status", "urls")]
     [string] $Command = "up"
 )
 
@@ -57,6 +57,12 @@ switch ($Command) {
     }
     "seed" {
         Invoke-Compose run --rm api python -m ict.cli db seed-defaults
+    }
+    "restore-r2" {
+        Invoke-Compose run --rm api python -m ict.cli archive restore-from-r2 --days 180 --continue-on-missing --skip-existing-local
+    }
+    "r2-status" {
+        Invoke-Compose run --rm api python -m ict.cli archive status --lookback-days 220
     }
     "urls" {
         Show-Urls

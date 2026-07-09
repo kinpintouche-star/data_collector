@@ -67,6 +67,14 @@ def test_github_workflows_do_not_reference_neon() -> None:
     assert "Neon" not in workflow_text
 
 
+def test_docker_compose_uses_r2_startup_restore_without_neon() -> None:
+    compose_text = Path("docker-compose.yml").read_text(encoding="utf-8")
+
+    assert "scripts/docker_api_entrypoint.sh" in compose_text
+    assert "MARKET_ARCHIVE_STARTUP_RESTORE_ENABLED" in compose_text
+    assert "LIVE_REMOTE_DATABASE_URL" not in compose_text
+
+
 def test_dashboard_exposes_live_collector_page() -> None:
     assert "Live Collector" in PAGES
     assert "mart_live_collector" in DASHBOARD_QUERIES["Live Collector"]

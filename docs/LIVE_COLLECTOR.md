@@ -101,6 +101,10 @@ Le restore:
 - dechiffre en memoire;
 - upsert en base locale sans doublons.
 
+Docker lance aussi un restore court au demarrage si les secrets R2 sont
+configures. Les variables `MARKET_ARCHIVE_STARTUP_*` permettent de choisir la
+fenetre, les symboles et le comportement en cas d'erreur.
+
 ## Monitoring
 
 Commandes utiles:
@@ -110,6 +114,8 @@ python -m ict.cli live sources --enabled-only
 python -m ict.cli archive status --lookback-days 30
 python -m ict.cli archive configured
 python -m ict.cli archive collect-to-r2 --dry-run --max-bucket-gb 10
+.\scripts\dev.ps1 restore-r2
+.\scripts\dev.ps1 r2-status
 ```
 
 Dans l'UI:

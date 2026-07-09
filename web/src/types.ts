@@ -331,6 +331,7 @@ export type DataCoveragePayload = {
   settings: {
     r2_configured: boolean;
     databento_configured: boolean;
+    archive_cache_dir: string;
     r2_bucket_usage: {
       bucket: string;
       prefix: string;

@@ -318,7 +318,7 @@ export function DataManagement() {
 
       <section className="data-settings">
         <label className="field">
-          <span>Fallback days</span>
+          <span>Jours à préparer</span>
           <input type="number" min={1} max={3650} value={fallbackDays} onChange={(event) => setFallbackDays(Number(event.target.value))} />
         </label>
         <label className="field">
@@ -329,12 +329,23 @@ export function DataManagement() {
           <span>Max Databento USD</span>
           <input type="number" min={0.01} max={125} step={0.25} value={maxDatabentoUsd} onChange={(event) => setMaxDatabentoUsd(Number(event.target.value))} />
         </label>
+        <div className="field quick-days">
+          <span>Fenêtre rapide</span>
+          <div>
+            {[7, 30, 90, 180].map((days) => (
+              <button className={fallbackDays === days ? "active" : ""} key={days} onClick={() => setFallbackDays(days)} type="button">
+                {days}j
+              </button>
+            ))}
+          </div>
+        </div>
       </section>
 
       <div className="data-config-line">
         <Database size={16} />
         <span>R2: {coverage?.settings.r2_configured ? "configuré" : "non configuré"}</span>
         <span>Databento: {coverage?.settings.databento_configured ? "configuré" : "non configuré"}</span>
+        <span>Cache: {coverage?.settings.archive_cache_dir ?? "-"}</span>
         <span>R2 usage: {formatNumber(coverage?.settings.r2_bucket_usage.total_gb, 3)} / {formatNumber(coverage?.settings.r2_bucket_usage.max_gb, 1)} GB</span>
         <span>Sélection: {selectedRows.length}</span>
       </div>

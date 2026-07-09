@@ -36,11 +36,11 @@ services:
       R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
       R2_BUCKET: ${R2_BUCKET:-}
       R2_ENDPOINT_URL: ${R2_ENDPOINT_URL:-}
-    command: >
-      sh -c "python -m alembic upgrade head
-      && python -m ict.cli db seed-defaults
-      && if [ \"$$MARKET_ARCHIVE_STARTUP_RESTORE_ENABLED\" = \"true\" ]; then python -m ict.cli archive restore-from-r2 --days \"$$MARKET_ARCHIVE_STARTUP_DAYS\" --continue-on-missing || echo 'Archive startup restore skipped.'; else echo 'Archive startup restore disabled.'; fi
-      && python -m uvicorn ict.api.app:app --host 0.0.0.0 --port 8000 --reload"
+      MARKET_ARCHIVE_STARTUP_SYMBOLS: ${MARKET_ARCHIVE_STARTUP_SYMBOLS:-}
+      MARKET_ARCHIVE_STARTUP_SOURCES: ${MARKET_ARCHIVE_STARTUP_SOURCES:-}
+      MARKET_ARCHIVE_STARTUP_MAX_DOWNLOAD_MB: ${MARKET_ARCHIVE_STARTUP_MAX_DOWNLOAD_MB:-1024}
+      MARKET_ARCHIVE_STARTUP_RESTORE_FAIL_FAST: ${MARKET_ARCHIVE_STARTUP_RESTORE_FAIL_FAST:-false}
+    command: sh scripts/docker_api_entrypoint.sh
     ports:
       - "8000:8000"
     volumes:

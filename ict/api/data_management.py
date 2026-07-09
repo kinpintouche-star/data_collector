@@ -409,6 +409,7 @@ def _data_settings_payload() -> dict[str, Any]:
     return {
         "r2_configured": archive_configured(),
         "databento_configured": bool(settings.databento_api_key),
+        "archive_cache_dir": settings.market_archive_cache_dir,
         "r2_bucket_usage": bucket_usage.as_dict(),
     }
 
