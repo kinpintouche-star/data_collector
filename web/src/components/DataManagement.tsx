@@ -318,27 +318,17 @@ export function DataManagement() {
 
       <section className="data-settings">
         <label className="field">
-          <span>Jours à préparer</span>
+          <span>Jours si vide</span>
           <input type="number" min={1} max={3650} value={fallbackDays} onChange={(event) => setFallbackDays(Number(event.target.value))} />
         </label>
         <label className="field">
-          <span>Overlap minutes</span>
+          <span>Overlap reprise</span>
           <input type="number" min={0} max={240} value={overlapMinutes} onChange={(event) => setOverlapMinutes(Number(event.target.value))} />
         </label>
         <label className="field">
           <span>Max Databento USD</span>
           <input type="number" min={0.01} max={125} step={0.25} value={maxDatabentoUsd} onChange={(event) => setMaxDatabentoUsd(Number(event.target.value))} />
         </label>
-        <div className="field quick-days">
-          <span>Fenêtre rapide</span>
-          <div>
-            {[7, 30, 90, 180].map((days) => (
-              <button className={fallbackDays === days ? "active" : ""} key={days} onClick={() => setFallbackDays(days)} type="button">
-                {days}j
-              </button>
-            ))}
-          </div>
-        </div>
       </section>
 
       <div className="data-config-line">

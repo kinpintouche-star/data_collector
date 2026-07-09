@@ -1250,28 +1250,7 @@ h2 {
 }
 
 .data-settings {
-  grid-template-columns: repeat(4, minmax(150px, 1fr));
-}
-
-.quick-days > div {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
-}
-
-.quick-days button {
-  min-height: 42px;
-  border: 1px solid rgba(203, 213, 225, 0.16);
-  border-radius: 8px;
-  background: #0f1317;
-  color: #cbd5e1;
-  font-weight: 800;
-}
-
-.quick-days button.active {
-  border-color: rgba(45, 212, 191, 0.55);
-  background: rgba(45, 212, 191, 0.14);
-  color: #5eead4;
+  grid-template-columns: repeat(3, minmax(150px, 1fr));
 }
 
 .search-field div {

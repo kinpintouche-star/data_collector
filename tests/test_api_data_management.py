@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
@@ -99,6 +99,49 @@ def test_fetch_r2_restores_archive_when_selected(monkeypatch) -> None:
     assert calls["symbols"] == ["BTCUSD"]
     assert calls["source_names"] == ["binance"]
     assert calls["skip_existing_local"] is True
+
+
+def test_fetch_r2_resumes_from_latest_local_candle(monkeypatch) -> None:
+    calls = {}
+    local_last = datetime(2026, 7, 6, 18, 30, tzinfo=timezone.utc)
+
+    class Result:
+        rows_read = 1
+        rows_written = 1
+        rows_inserted = 1
+        rows_updated = 0
+        partitions = [{"day": "2026-07-06"}]
+        missing = []
+        skipped = []
+
+    def fake_restore(**kwargs):
+        calls.update(kwargs)
+        return Result()
+
+    monkeypatch.setattr(data_management, "archive_configured", lambda: True)
+    monkeypatch.setattr(data_management, "restore_from_r2", fake_restore)
+    request = DataFetchJobRequest.model_validate(
+        {
+            "channel": "r2",
+            "assets": [{"symbol_code": "EURUSD", "source_name": "dukascopy"}],
+            "fallback_days": 180,
+            "overlap_minutes": 15,
+        }
+    )
+
+    data_management.fetch_missing_for_row(
+        {
+            "symbol_code": "EURUSD",
+            "source_name": "dukascopy",
+            "source_type": "dukascopy",
+            "local_last": local_last.isoformat(),
+            "complete_day_ok": False,
+        },
+        request,
+        now=datetime(2026, 7, 8, 12, tzinfo=timezone.utc),
+    )
+
+    assert calls["since"] == local_last - timedelta(minutes=15)
 
 
 def test_data_routes_are_patchable_without_database(monkeypatch) -> None:
