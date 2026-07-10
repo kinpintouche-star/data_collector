@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArchiveRestore, Database, RefreshCcw, Search, Square, SquareCheckBig } from "lucide-react";
+import { ArchiveRestore, Database, RefreshCcw, Search } from "lucide-react";
 import { getDataApiUsage, getDataCoverage, getDataFetchJob, launchDataFetch } from "../api";
 import type { DataApiUsagePayload, DataCoveragePayload, DataCoverageRow, DataFetchChannel, DataFetchJob } from "../types";
 
@@ -8,6 +8,8 @@ const channelLabels: Record<DataFetchChannel, string> = {
   r2: "R2",
   databento: "Databento"
 };
+
+type RecommendedChannel = DataCoverageRow["recommended_channel"];
 
 function rowKey(row: DataCoverageRow): string {
   return `${row.symbol_code}::${row.source_name}`;
@@ -40,19 +42,6 @@ function statusLabel(row: DataCoverageRow): string {
     return row.today_present ? "Aujourd'hui" : "Jour complet OK";
   }
   return "Retard";
-}
-
-function channelIsApplicable(row: DataCoverageRow, channel: DataFetchChannel): boolean {
-  if (channel === "auto") {
-    return true;
-  }
-  if (channel === "r2") {
-    return row.source_type !== "databento";
-  }
-  if (channel === "databento") {
-    return row.source_type === "databento";
-  }
-  return false;
 }
 
 function configMissing(rows: DataCoverageRow[], channel: DataFetchChannel, settings: DataCoveragePayload["settings"] | null): boolean {
@@ -93,6 +82,7 @@ export function DataManagement() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [groupFilter, setGroupFilter] = useState("all");
   const [job, setJob] = useState<DataFetchJob | null>(null);
+  const [enabledFetchChannels, setEnabledFetchChannels] = useState<RecommendedChannel[]>(["R2"]);
   const [fallbackDays, setFallbackDays] = useState(180);
   const [overlapMinutes, setOverlapMinutes] = useState(5);
   const [maxDatabentoUsd, setMaxDatabentoUsd] = useState(5);
@@ -125,7 +115,7 @@ export function DataManagement() {
       if (!query) {
         return true;
       }
-      return `${row.symbol_code} ${row.source_name} ${row.group ?? ""} ${row.source_type ?? ""}`.toLowerCase().includes(query);
+      return `${row.symbol_code} ${row.source_name} ${row.group ?? ""} ${row.source_type ?? ""} ${row.recommended_channel}`.toLowerCase().includes(query);
     });
   }, [channelFilter, groupFilter, rows, search, statusFilter]);
 
@@ -133,6 +123,12 @@ export function DataManagement() {
     const keys = new Set(selectedKeys);
     return rows.filter((row) => keys.has(rowKey(row)));
   }, [rows, selectedKeys]);
+
+  const fetchBaseRows = selectedRows.length ? selectedRows : filteredRows;
+  const fetchRows = useMemo(() => {
+    const channels = new Set(enabledFetchChannels);
+    return fetchBaseRows.filter((row) => channels.has(row.recommended_channel));
+  }, [enabledFetchChannels, fetchBaseRows]);
 
   const loadData = async () => {
     setLoading(true);
@@ -176,21 +172,26 @@ export function DataManagement() {
     setSelectedKeys((current) => (current.includes(key) ? current.filter((item) => item !== key) : [...current, key]));
   };
 
-  const selectFiltered = () => setSelectedKeys(filteredRows.map(rowKey));
-  const clearSelection = () => setSelectedKeys([]);
-  const selectChannel = (channel: string) => setSelectedKeys(rows.filter((row) => row.recommended_channel === channel).map(rowKey));
+  const toggleFetchChannel = (channel: RecommendedChannel) => {
+    setEnabledFetchChannels((current) =>
+      current.includes(channel) ? current.filter((item) => item !== channel) : [...current, channel]
+    );
+  };
 
-  const runFetch = async (channel: DataFetchChannel, explicitRows: DataCoverageRow[] = selectedRows) => {
-    const applicableRows = explicitRows.filter((row) => channelIsApplicable(row, channel));
-    if (!applicableRows.length) {
-      setError("Aucun actif compatible avec ce canal.");
+  const runFetch = async (explicitRows: DataCoverageRow[] = fetchRows) => {
+    if (!explicitRows.length) {
+      setError("Aucun actif à récupérer avec cette sélection.");
+      return;
+    }
+    if (configMissing(explicitRows, "auto", coverage?.settings ?? null)) {
+      setError("Configuration manquante pour au moins un canal sélectionné.");
       return;
     }
     setError(null);
     try {
       const next = await launchDataFetch({
-        channel,
-        assets: applicableRows.map((row) => ({ symbol_code: row.symbol_code, source_name: row.source_name })),
+        channel: "auto",
+        assets: explicitRows.map((row) => ({ symbol_code: row.symbol_code, source_name: row.source_name })),
         fallback_days: fallbackDays,
         overlap_minutes: overlapMinutes,
         max_databento_usd: maxDatabentoUsd
@@ -201,10 +202,7 @@ export function DataManagement() {
     }
   };
 
-  const actionDisabled = (channel: DataFetchChannel) => {
-    const applicableRows = selectedRows.filter((row) => channelIsApplicable(row, channel));
-    return !selectedRows.length || !applicableRows.length || configMissing(applicableRows, channel, coverage?.settings ?? null);
-  };
+  const fetchDisabled = !fetchRows.length || configMissing(fetchRows, "auto", coverage?.settings ?? null);
 
   return (
     <section className="data-page">
@@ -299,21 +297,19 @@ export function DataManagement() {
       </section>
 
       <section className="data-actions">
-        <button className="icon-button" onClick={selectFiltered} type="button">
-          <SquareCheckBig size={16} />
-          <span>All filtrés</span>
-        </button>
-        <button className="icon-button" onClick={clearSelection} type="button">
-          <Square size={16} />
-          <span>Clear</span>
-        </button>
-        <button className="icon-button" onClick={() => selectChannel("R2")} type="button">R2 only</button>
-        <button className="icon-button" onClick={() => selectChannel("Databento")} type="button">Databento only</button>
-        <button className="primary-inline" disabled={actionDisabled("r2")} onClick={() => void runFetch("r2")} type="button">
+        <div className="channel-picks" aria-label="Canaux à inclure">
+          {(["R2", "Databento"] as RecommendedChannel[]).map((channel) => (
+            <label key={channel}>
+              <input checked={enabledFetchChannels.includes(channel)} onChange={() => toggleFetchChannel(channel)} type="checkbox" />
+              <span>{channel}</span>
+            </label>
+          ))}
+        </div>
+        <button className="primary-inline" disabled={fetchDisabled} onClick={() => void runFetch()} type="button">
           <ArchiveRestore size={17} />
-          <span>Préparer données R2</span>
+          <span>Récupérer les données</span>
         </button>
-        <button className="icon-button" disabled={actionDisabled("databento")} onClick={() => void runFetch("databento")} type="button">Fetch Databento</button>
+        <small>{fetchRows.length} actif{fetchRows.length > 1 ? "s" : ""}</small>
       </section>
 
       <section className="data-settings">
@@ -337,7 +333,7 @@ export function DataManagement() {
         <span>Databento: {coverage?.settings.databento_configured ? "configuré" : "non configuré"}</span>
         <span>Cache: {coverage?.settings.archive_cache_dir ?? "-"}</span>
         <span>R2 usage: {formatNumber(coverage?.settings.r2_bucket_usage.total_gb, 3)} / {formatNumber(coverage?.settings.r2_bucket_usage.max_gb, 1)} GB</span>
-        <span>Sélection: {selectedRows.length}</span>
+        <span>Cochés: {selectedRows.length}</span>
       </div>
 
       {job && (
@@ -371,13 +367,11 @@ export function DataManagement() {
               <th></th>
               <th>Actif</th>
               <th>Source</th>
-              <th>Canal</th>
               <th>Statut</th>
               <th>Local last</th>
               <th>R2 last</th>
               <th>Rows</th>
               <th>Flags</th>
-              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -394,10 +388,9 @@ export function DataManagement() {
                     <small>{row.group ?? row.asset_type ?? "-"}</small>
                   </td>
                   <td>
-                    <span>{row.source_name}</span>
+                    <span>{row.source_name} <em className="channel-hint">({row.recommended_channel})</em></span>
                     <small>{row.pending_reason ? `Pending: ${row.pending_reason}` : row.source_type ?? row.provider ?? "-"}</small>
                   </td>
-                  <td>{row.recommended_channel}</td>
                   <td><span className={`freshness ${row.freshness_status}`}>{statusLabel(row)}</span></td>
                   <td>{formatDate(row.local_last)}</td>
                   <td>
@@ -406,26 +399,12 @@ export function DataManagement() {
                   </td>
                   <td>{formatNumber(row.candle_rows)}</td>
                   <td>{formatNumber(row.flagged_candles)}</td>
-                  <td>
-                    <div className="row-actions">
-                      {(["r2", "databento"] as DataFetchChannel[]).map((channel) => (
-                        <button
-                          disabled={!channelIsApplicable(row, channel) || configMissing([row], channel, coverage?.settings ?? null)}
-                          key={channel}
-                          onClick={() => void runFetch(channel, [row])}
-                          type="button"
-                        >
-                          {channelLabels[channel]}
-                        </button>
-                      ))}
-                    </div>
-                  </td>
                 </tr>
               );
             })}
             {!filteredRows.length && (
               <tr>
-                <td colSpan={10}>
+                <td colSpan={8}>
                   <div className="empty-state">Aucun actif ne correspond aux filtres.</div>
                 </td>
               </tr>

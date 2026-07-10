@@ -1282,6 +1282,36 @@ h2 {
   align-items: center;
 }
 
+.data-actions > small {
+  color: #8ea0ae;
+  font-size: 12px;
+}
+
+.channel-picks {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.channel-picks label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid rgba(203, 213, 225, 0.12);
+  border-radius: 8px;
+  background: #0f1317;
+  color: #cbd5e1;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.channel-picks input {
+  width: 14px;
+  height: 14px;
+}
+
 .data-config-line {
   display: flex;
   flex-wrap: wrap;
@@ -1336,7 +1366,7 @@ h2 {
 
 .data-table {
   width: 100%;
-  min-width: 1120px;
+  min-width: 980px;
   border-collapse: collapse;
 }
 
@@ -1375,6 +1405,13 @@ h2 {
   background: rgba(245, 158, 11, 0.04);
 }
 
+.channel-hint {
+  color: #8ea0ae;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+}
+
 .freshness {
   display: inline-flex;
   align-items: center;
@@ -1400,20 +1437,6 @@ h2 {
 .freshness.empty {
   border-color: rgba(251, 113, 133, 0.36);
   color: #fb7185;
-}
-
-.row-actions {
-  display: flex;
-  gap: 6px;
-}
-
-.row-actions button {
-  min-height: 28px;
-  border: 1px solid rgba(203, 213, 225, 0.12);
-  border-radius: 6px;
-  background: #0c1117;
-  color: #cbd5e1;
-  font-size: 11px;
 }
 
 .api-usage-panel {
