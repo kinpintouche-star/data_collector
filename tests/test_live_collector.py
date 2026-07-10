@@ -72,6 +72,7 @@ def test_docker_compose_uses_r2_startup_restore_without_neon() -> None:
 
     assert "scripts/docker_api_entrypoint.sh" in compose_text
     assert "MARKET_ARCHIVE_STARTUP_RESTORE_ENABLED" in compose_text
+    assert "MARKET_ARCHIVE_STARTUP_RESTORE_ENABLED:-false" in compose_text
     assert "LIVE_REMOTE_DATABASE_URL" not in compose_text
 
 

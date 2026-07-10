@@ -192,7 +192,7 @@ Docker utilise `scripts/docker_api_entrypoint.sh` pour garder le lancement lisib
 Variables utiles:
 
 ```text
-MARKET_ARCHIVE_STARTUP_RESTORE_ENABLED=true
+MARKET_ARCHIVE_STARTUP_RESTORE_ENABLED=false
 MARKET_ARCHIVE_STARTUP_DAYS=7
 MARKET_ARCHIVE_STARTUP_SYMBOLS=
 MARKET_ARCHIVE_STARTUP_SOURCES=
@@ -201,8 +201,9 @@ MARKET_ARCHIVE_STARTUP_RESTORE_FAIL_FAST=false
 MARKET_ARCHIVE_CACHE_DIR=.cache/market_archive
 ```
 
-Le restore de demarrage est volontairement court par defaut. Pour preparer
-une vraie fenetre de backtest, utiliser la page `Data` ou:
+Le restore de demarrage est desactive par defaut pour ne jamais bloquer
+l'ouverture de l'API et du front. Pour preparer une vraie fenetre de backtest,
+utiliser la page `Data` ou:
 
 ```powershell
 .\scripts\dev.ps1 restore-r2

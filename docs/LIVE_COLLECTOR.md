@@ -101,9 +101,10 @@ Le restore:
 - dechiffre en memoire;
 - upsert en base locale sans doublons.
 
-Docker lance aussi un restore court au demarrage si les secrets R2 sont
-configures. Les variables `MARKET_ARCHIVE_STARTUP_*` permettent de choisir la
-fenetre, les symboles et le comportement en cas d'erreur.
+Docker peut lancer un restore court au demarrage si `MARKET_ARCHIVE_STARTUP_RESTORE_ENABLED=true`,
+mais ce mode est desactive par defaut pour ne jamais bloquer l'API et le front.
+Les variables `MARKET_ARCHIVE_STARTUP_*` permettent de choisir la fenetre, les
+symboles et le comportement en cas d'erreur.
 
 ## Monitoring
 
