@@ -192,6 +192,7 @@ Docker utilise `scripts/docker_api_entrypoint.sh` pour garder le lancement lisib
 Variables utiles:
 
 ```text
+LOCAL_MARKET_ARCHIVE_CACHE_DIR=./.cache/market_archive
 MARKET_ARCHIVE_STARTUP_RESTORE_ENABLED=false
 MARKET_ARCHIVE_STARTUP_DAYS=7
 MARKET_ARCHIVE_STARTUP_SYMBOLS=
@@ -200,6 +201,14 @@ MARKET_ARCHIVE_STARTUP_MAX_DOWNLOAD_MB=1024
 MARKET_ARCHIVE_STARTUP_RESTORE_FAIL_FAST=false
 MARKET_ARCHIVE_CACHE_DIR=.cache/market_archive
 ```
+
+Les chemins `LOCAL_*` sont des chemins hote Docker Compose. Comme le projet est
+dans `E:\tradinglab`, la valeur par defaut stocke le cache R2 dans ce dossier.
+Postgres reste un volume Docker nomme: sur Windows, l'image officielle Postgres
+ne peut pas initialiser son repertoire de donnees directement sur NTFS car
+`initdb` doit appliquer des permissions Unix. Pour deplacer Postgres hors du
+disque C, deplacer le stockage Docker Desktop vers E. Voir
+[DOCKER_STORAGE_ON_E.md](DOCKER_STORAGE_ON_E.md).
 
 Le restore de demarrage est desactive par defaut pour ne jamais bloquer
 l'ouverture de l'API et du front. Pour preparer une vraie fenetre de backtest,

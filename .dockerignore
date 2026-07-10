@@ -6,6 +6,7 @@ __pycache__
 .ruff_cache
 .mypy_cache
 .env
+.docker-data
 node_modules
 web/node_modules
 web/dist

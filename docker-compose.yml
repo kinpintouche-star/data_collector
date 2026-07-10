@@ -45,6 +45,7 @@ services:
       - "8000:8000"
     volumes:
       - .:/app
+      - ${LOCAL_MARKET_ARCHIVE_CACHE_DIR:-./.cache/market_archive}:/app/.cache/market_archive
     depends_on:
       postgres:
         condition: service_healthy
